@@ -83,7 +83,45 @@ void sr_handlepacket(struct sr_instance* sr,
 
   printf("*** -> Received packet of length %d \n",len);
 
-  /* fill in code here */
+  sr_ethernet_hdr_t* ether_hdr = 0;
+  char* if_macaddr = 0;
+  char* ether_destaddr = 0;
+  uint16_t ethertype;
+  uint8_t* load = 0;
+  int load_len;
+
+  /* Extract ethernet header*/
+  ether_hdr = (sr_ethernet_hdr_t*) packet;
+
+  /* Ensure that ethernet destination address is correct */
+  ether_destaddr = ether_hdr->ether_dhost;
+  if_macaddr = sr_get_interface(sr, interface)->addr;
+
+  if (strncmp(ether_destaddr, if_macaddr) != 0) {
+    fprintf(stderr, "Ethernet destination address does not match interface");
+    return;
+  }
+
+  /* Check protocol of ethernet destination address */
+  ethertype = ether_hdr->ether_type;
+  load = packet + sizeof(sr_ethernet_hdr_t);
+  load_len = len-sizeof(sr_ethernet_hdr_t);
+  switch(ethertype) {
+    /* If it is ARP, check if it request or reply.  If it is request, send our reply. If
+     * it is a reply, process the associated ARP req queue.*/
+    case ethertype_arp:
+        unsigned short arp_type = ((sr_arp_packet_t*)load)->ar_op;
+        if (arp_type == arp_op_request) {
+          sr_handle_arpreq(sr, load, load_len, interface);
+        } else {
+          sr_handle_arpreply(sr, load, load_len);
+        }
+        break;
+    /*If it is IP, handle the IP packet.*/
+    case ethertype_ip:
+        sr_handle_ippacket(sr, load, load_len, interface);
+        break;
+  }
 
 }/* end sr_handlepacket */
 
