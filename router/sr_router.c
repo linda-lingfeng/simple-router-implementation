@@ -208,3 +208,50 @@ uint8_t* sr_create_arppacket(unsigned int* len,
   
   return (uint8_t*)arp_packet;
 }; /* end sr_create_arppacket */
+
+void sr_handle_arpreq(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len, char* interface/* lent */) {
+  sr_arp_packet_t* arpreq = 0;
+  char source_ether_addr[ETHER_ADDR_LEN] = 0;
+  char dest_ether_addr[ETHER_ADDR_LEN] = 0;
+  uint32_t source_ip_addr = 0;
+  uint32_t dest_ip_addr = 0;
+
+  /*Extract information from arp packet*/
+  arpreq = (sr_arp_packet_t*) packet;
+  memcpy(source_ether_addr, arpreq->ar_sha, ETHER_ADDR_LEN);
+  source_ip_addr = arpreq->ar_sip; /* addresses should already be in network byte order */
+  dest_ip_addr = arpreq->ar_tip;
+
+  /*Create arp reply*/
+  uint8_t* arpreply = 0;
+  uint8_t* frame = 0;
+  unsigned int* load_len;
+  memcpy(dest_ether_addr, sr_get_interface(sr, interface)->addr, ETHER_ADDR_LEN);
+  /* note dest and source are reversed since we are replying back to the sender*/
+  arpreply = sr_create_arppacket(load_len, arp_op_reply, dest_ether_addr, dest_ip_addr, source_ether_addr, source_ip_addr);
+  
+  /*Create ethernet header*/
+  frame = sr_create_etherframe(*load_len, arpreply, source_ether_addr, dest_ether_addr, ethertype_arp);
+
+  /*Pass to sr_send_packet()*/
+  if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len, interface) != 0) {
+    fprintf(stderr, "Packet could not be sent");
+  }
+
+  /*TODO: Cache sender mapping in arp table*/
+
+};
+
+void sr_handle_arpreply(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len){
+  return;
+};
+
+void sr_handle_ippacket(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len, char* interface/* lent */){
+  /* DEBUG: print ip header*/
+  return;
+};
+
+void sr_forward_ippacket(struct sr_instance* sr, uint64_t* packet /* lent */, unsigned int len, char* interface/* lent */){
+  return;
+};
+
