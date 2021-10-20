@@ -84,20 +84,20 @@ void sr_handlepacket(struct sr_instance* sr,
   printf("*** -> Received packet of length %d \n",len);
 
   sr_ethernet_hdr_t* ether_hdr = 0;
-  char* if_macaddr = 0;
-  char* ether_destaddr = 0;
+  char if_macaddr[ETHER_ADDR_LEN] = 0;
+  char ether_destaddr[ETHER_ADDR_LEN] = 0;
   uint16_t ethertype;
   uint8_t* load = 0;
-  int load_len;
+  unsigned int load_len;
 
   /* Extract ethernet header*/
   ether_hdr = (sr_ethernet_hdr_t*) packet;
 
   /* Ensure that ethernet destination address is correct */
-  ether_destaddr = ether_hdr->ether_dhost;
-  if_macaddr = sr_get_interface(sr, interface)->addr;
+  memcpy(ether_destaddr, ether_hdr->ether_dhost, ETHER_ADDR_LEN);
+  memcpy(if_macaddr, sr_get_interface(sr, interface)->addr, ETHER_ADDR_LEN);
 
-  if (strncmp(ether_destaddr, if_macaddr) != 0) {
+  if (strncmp(ether_destaddr, if_macaddr, ETHER_ADDR_LEN) != 0) {
     fprintf(stderr, "Ethernet destination address does not match interface");
     return;
   }
@@ -236,6 +236,7 @@ void sr_handle_arpreq(struct sr_instance* sr, uint8_t* packet /* lent */, unsign
   /*Pass to sr_send_packet()*/
   if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len, interface) != 0) {
     fprintf(stderr, "Packet could not be sent");
+    return;
   }
 
   /*TODO: Cache sender mapping in arp table*/
