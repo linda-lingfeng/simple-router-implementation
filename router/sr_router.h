@@ -67,6 +67,9 @@ int sr_read_from_server(struct sr_instance* );
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
+uint8_t* sr_create_arppacket(unsigned int* len, unsigned short arp_type, unsigned char* source_ether_addr, uint32_t source_protocol_addr, unsigned char* dest_ether_addr, uint32_t dest_protocol_addr);
+uint8_t* sr_create_icmppacket(unsigned int* len, uint8_t icmp_type, uint8_t icmp_code);
+uint8_t* sr_create_etherframe(unsigned int load_len, uint8_t* load, uint8_t* dest_ether_ddr, uint8_t* source_ether_addr, uint16_t ether_type);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );

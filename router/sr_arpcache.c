@@ -11,6 +11,8 @@
 #include "sr_if.h"
 #include "sr_protocol.h"
 
+static void sr_handle_arpreq_queue(struct sr_arpreq* req);
+
 /* 
   This function gets called every second. For each request sent out, we keep
   checking whether we should resend an request or destroy the arp request.

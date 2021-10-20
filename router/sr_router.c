@@ -22,6 +22,11 @@
 #include "sr_arpcache.h"
 #include "sr_utils.h"
 
+static void sr_handle_arpreq(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len, char* interface/* lent */);
+static void sr_handle_arpreply(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len);
+static void sr_handle_ippacket(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len, char* interface/* lent */);
+static void sr_forward_ippacket(struct sr_instance* sr, uint64_t* packet /* lent */, unsigned int len, char* interface/* lent */);
+
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
  * Scope:  Global
@@ -80,5 +85,6 @@ void sr_handlepacket(struct sr_instance* sr,
 
   /* fill in code here */
 
-}/* end sr_ForwardPacket */
+}/* end sr_handlepacket */
+
 
