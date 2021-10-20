@@ -83,26 +83,20 @@ struct sr_icmp_hdr {
   uint8_t icmp_type;
   uint8_t icmp_code;
   uint16_t icmp_sum;
-  
+  uint32_t variable_field;
 } __attribute__ ((packed)) ;
 typedef struct sr_icmp_hdr sr_icmp_hdr_t;
 
-
-/* Structure of a type3 ICMP header
+/*
+ * Structure of ICMP packet, applies to most types
+ * except Type 0 echo reply.
  */
-struct sr_icmp_t3_hdr {
-  uint8_t icmp_type;
-  uint8_t icmp_code;
-  uint16_t icmp_sum;
-  uint16_t unused;
-  uint16_t next_mtu;
+ 
+struct sr_icmp_packet {
+  sr_icmp_hdr_t hdr;
   uint8_t data[ICMP_DATA_SIZE];
-
 } __attribute__ ((packed)) ;
-typedef struct sr_icmp_t3_hdr sr_icmp_t3_hdr_t;
-
-
-
+typedef struct sr_icmp_packet sr_icmp_packet_t;
 
 /*
  * Structure of an internet header, naked of options.
@@ -159,6 +153,9 @@ enum sr_ethertype {
   ethertype_ip = 0x0800,
 };
 
+/*
+ * ARP Packet prototype.
+ */
 
 enum sr_arp_opcode {
   arp_op_request = 0x0001,
@@ -169,9 +166,19 @@ enum sr_arp_hrd_fmt {
   arp_hrd_ethernet = 0x0001,
 };
 
+enum sr_arp_pro_fmt {
+  arp_pro_ip=0x0800,
+};
 
-struct sr_arp_hdr
+
+struct sr_arp_packet
 {
+#ifndef ETHER_ADDR_LEN
+#define ETHER_ADDR_LEN 6
+#endif
+#ifndef IP_ADDR_LEN
+#define IP_ADDR_LEN 4
+#endif
     unsigned short  ar_hrd;             /* format of hardware address   */
     unsigned short  ar_pro;             /* format of protocol address   */
     unsigned char   ar_hln;             /* length of hardware address   */
@@ -182,7 +189,7 @@ struct sr_arp_hdr
     unsigned char   ar_tha[ETHER_ADDR_LEN];   /* target hardware address      */
     uint32_t        ar_tip;             /* target IP address            */
 } __attribute__ ((packed)) ;
-typedef struct sr_arp_hdr sr_arp_hdr_t;
+typedef struct sr_arp_packet sr_arp_packet_t;
 
 #define sr_IFACE_NAMELEN 32
 

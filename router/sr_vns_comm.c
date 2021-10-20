@@ -648,15 +648,15 @@ int  sr_arp_req_not_for_us(struct sr_instance* sr,
 {
     struct sr_if* iface = sr_get_interface(sr, interface);
     struct sr_ethernet_hdr* e_hdr = 0;
-    struct sr_arp_hdr*       a_hdr = 0;
+    struct sr_arp_packet*       a_hdr = 0;
 
-    if (len < sizeof(struct sr_ethernet_hdr) + sizeof(struct sr_arp_hdr) )
+    if (len < sizeof(struct sr_ethernet_hdr) + sizeof(struct sr_arp_packet) )
     { return 0; }
 
     assert(iface);
 
-    e_hdr = (struct sr_ethernet_hdr*)packet;
-    a_hdr = (struct sr_arp_hdr*)(packet + sizeof(struct sr_ethernet_hdr));
+    e_hdr = (struct sr_ethernet_packet*)packet;
+    a_hdr = (struct sr_arp_packet*)(packet + sizeof(struct sr_ethernet_hdr));
 
     if ( (e_hdr->ether_type == htons(ethertype_arp)) &&
             (a_hdr->ar_op      == htons(arp_op_request))   &&
