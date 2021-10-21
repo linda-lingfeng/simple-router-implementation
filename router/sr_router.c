@@ -12,7 +12,9 @@
  **********************************************************************/
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 
 #include "sr_if.h"
@@ -26,6 +28,7 @@ static void sr_handle_arpreq(struct sr_instance* sr, uint8_t* packet /* lent */,
 static void sr_handle_arpreply(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len);
 static void sr_handle_ippacket(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len, char* interface/* lent */);
 static void sr_forward_ippacket(struct sr_instance* sr, uint64_t* packet /* lent */, unsigned int len, char* interface/* lent */);
+char ether_broadcast_addr[ETHER_ADDR_LEN];
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -52,6 +55,11 @@ void sr_init(struct sr_instance* sr)
     pthread_create(&thread, &(sr->attr), sr_arpcache_timeout, sr);
     
     /* Add initialization code here! */
+    int i;
+    for (i = 0; i < 6; i++) {
+      ether_broadcast_addr[i] = 0xFF;
+    }
+
 
 } /* -- sr_init -- */
 
@@ -97,39 +105,38 @@ void sr_handlepacket(struct sr_instance* sr,
   memcpy(dest_macaddr, ether_hdr->ether_dhost, ETHER_ADDR_LEN);
   memcpy(if_macaddr, sr_get_interface(sr, interface)->addr, ETHER_ADDR_LEN);
 
-  if (strncmp(dest_macaddr, if_macaddr, ETHER_ADDR_LEN) != 0) {
+  if (strncmp(dest_macaddr, ether_broadcast_addr, ETHER_ADDR_LEN != 0) &&
+      strncmp(dest_macaddr, if_macaddr, ETHER_ADDR_LEN) != 0) {
     fprintf(stderr, "Ethernet destination address does not match interface");
     return;
   }
 
   /* Check protocol of ethernet destination address */
-  ethertype = ether_hdr->ether_type;
+  ethertype = ntohs(ether_hdr->ether_type);
   load = packet + sizeof(sr_ethernet_hdr_t);
   load_len = len - sizeof(sr_ethernet_hdr_t);
   /*Debug Functions*/
-  fprintf(stderr, "Confirmed destination of following frame");
+  fprintf(stderr, "Confirmed destination of following frame \n");
   print_hdr_eth(packet);
 
-  switch(ethertype) {
+  if (ethertype == ethertype_arp) {
     /* If it is ARP, check if it request or reply.  If it is request, send our reply. If
      * it is a reply, process the associated ARP req queue.*/
-    case ethertype_arp:
-        unsigned short arp_type = ((sr_arp_packet_t*)load)->ar_op;
-        if (arp_type == arp_op_request) {
-          sr_handle_arpreq(sr, load, load_len, interface);
-        } else if (arp_type == arp_op_reply) {
-          sr_handle_arpreply(sr, load, load_len);
-        } else {
-          fprintf(stderr, "Invalid ARP type");
-          return;
-        }
-        break;
-    /*If it is IP, handle the IP packet.*/
-    case ethertype_ip:
-        sr_handle_ippacket(sr, load, load_len, interface);
-        break;
+    unsigned short arp_type;
+    arp_type = ntohs(((sr_arp_packet_t*)load)->ar_op);
+    if (arp_type == arp_op_request) {
+      sr_handle_arpreq(sr, load, load_len, interface);
+    } else if (arp_type == arp_op_reply) {
+      sr_handle_arpreply(sr, load, load_len);
+    } else {
+      fprintf(stderr, "Invalid ARP type");
+      return;
+    }
+  } else if (ethertype == ethertype_ip) {
+    sr_handle_ippacket(sr, load, load_len, interface);
+  } else {
+    fprintf(stderr, "Unsupported Type");
   }
-
 }/* end sr_handlepacket */
 
 /*---------------------------------------------------------------------
@@ -145,10 +152,11 @@ void sr_handlepacket(struct sr_instance* sr,
 
 uint8_t* sr_create_etherframe (unsigned int load_len,
                                 uint8_t* load,
-                                uint8_t* dest_ether_addr,
-                                uint8_t* source_ether_addr,
+                                char* dest_ether_addr,
+                                char* source_ether_addr,
                                 uint16_t ether_type)
 {
+  fprintf(stderr, "Wrapping in ethernet frame \n");
   sr_ethernet_hdr_t* frame = 0;
 
   /*Allocate space for the ethernet frame*/
@@ -160,10 +168,9 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
   frame->ether_type=htons(ether_type);
 
   /*Add load and return pointer*/
-  frame = (uint8_t*) frame;
-  memcpy(frame + sizeof(sr_ethernet_hdr_t), load, load_len);
+  memcpy((uint8_t*)frame + sizeof(sr_ethernet_hdr_t), load, load_len);
 
-  return frame;
+  return (uint8_t*) frame;
 }
 
 /*---------------------------------------------------------------------
@@ -182,12 +189,12 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
  *---------------------------------------------------------------------*/
 uint8_t* sr_create_arppacket(unsigned int* len,
                              unsigned short arp_type,
-                             unsigned char* source_ether_addr,
+                             char* source_ether_addr,
                              uint32_t source_protocol_addr,
-                             unsigned char* dest_ether_addr,
+                             char* dest_ether_addr,
                              uint32_t dest_protocol_addr)
 {
-  
+  fprintf(stderr, "Generating arp reply \n");
   sr_arp_packet_t* arp_packet = 0;
   arp_packet = (sr_arp_packet_t*)malloc(sizeof(sr_arp_packet_t));
   
@@ -201,8 +208,7 @@ uint8_t* sr_create_arppacket(unsigned int* len,
     /* Set ARP op code*/
     arp_packet-> ar_op = htons(arp_type);
 
-    /*Set hardware, protocol source and destination
-     *Note assumes ethernet addresses are in network byte order*/
+    /*Set hardware, protocol source and destination data*/
     memcpy(arp_packet->ar_sha, source_ether_addr, ETHER_ADDR_LEN);
     arp_packet->ar_sip = htonl(source_protocol_addr);
 
@@ -217,6 +223,7 @@ uint8_t* sr_create_arppacket(unsigned int* len,
 }; /* end sr_create_arppacket */
 
 void sr_handle_arpreq(struct sr_instance* sr, uint8_t* packet /* lent */, unsigned int len, char* interface/* lent */) {
+  /* Note assumes that ip address is destined for us*/
   /*TODO: Should add check to ensure hardware format is eth and protocol format is ip*/
   sr_arp_packet_t* arpreq = 0;
   char source_ether_addr[ETHER_ADDR_LEN];
@@ -226,26 +233,26 @@ void sr_handle_arpreq(struct sr_instance* sr, uint8_t* packet /* lent */, unsign
   /*Extract data from arp packet*/
   arpreq = (sr_arp_packet_t*) packet;
   memcpy(source_ether_addr, arpreq->ar_sha, ETHER_ADDR_LEN);
-  source_ip_addr = arpreq->ar_sip; /* addresses should already be in network byte order */
-  dest_ip_addr = arpreq->ar_tip;
+  source_ip_addr = ntohl(arpreq->ar_sip);
+  dest_ip_addr = ntohl(arpreq->ar_tip);
 
   /*Create arp reply*/
   uint8_t* arpreply = 0;
   uint8_t* frame = 0;
-  unsigned int* load_len;
+  unsigned int load_len;
   char dest_ether_addr[ETHER_ADDR_LEN];
   memcpy(dest_ether_addr, sr_get_interface(sr, interface)->addr, ETHER_ADDR_LEN);
   /*TODO: Error handling for case of malloc failure*/
   /* note dest and source are reversed since we are replying back to the sender*/
-  arpreply = sr_create_arppacket(load_len, arp_op_reply, dest_ether_addr, dest_ip_addr, source_ether_addr, source_ip_addr);
+  arpreply = sr_create_arppacket(&load_len, arp_op_reply, dest_ether_addr, dest_ip_addr, source_ether_addr, source_ip_addr);
   print_hdr_arp(arpreply); /*DEBUG*/
   
   /*Create ethernet header*/
-  frame = sr_create_etherframe(*load_len, arpreply, source_ether_addr, dest_ether_addr, ethertype_arp);
+  frame = sr_create_etherframe(load_len, arpreply, source_ether_addr, dest_ether_addr, ethertype_arp);
   print_hdr_eth(frame); /*DEBUG*/
 
   /*Pass to sr_send_packet()*/
-  if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + *load_len, interface) != 0) {
+  if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len, interface) != 0) {
     fprintf(stderr, "Packet could not be sent");
     free(arpreply);
     free(frame);
