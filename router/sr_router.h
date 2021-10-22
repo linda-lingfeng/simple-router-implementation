@@ -67,9 +67,19 @@ int sr_read_from_server(struct sr_instance* );
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
-uint8_t* sr_create_arppacket(unsigned int* len, unsigned short arp_type, char* source_ether_addr, uint32_t source_protocol_addr, char* dest_ether_addr, uint32_t dest_protocol_addr);
-uint8_t* sr_create_icmppacket(unsigned int* len, uint8_t icmp_type, uint8_t icmp_code);
-uint8_t* sr_create_etherframe(unsigned int load_len, uint8_t* load, char* dest_ether_ddr, char* source_ether_addr, uint16_t ether_type);
+void sr_send_arp(struct sr_instance* sr,
+                 unsigned int len,
+                 char* interface/*lent*/,
+                 unsigned short arp_type,
+                 char* dest_ether_addr,
+                 uint32_t dest_ip_addr);
+void sr_send_icmp(struct sr_instance* sr,
+                  uint64_t* packet /* lent */,
+                  unsigned int len,
+                  char* interface/* lent */,
+                  uint8_t type,
+                  uint8_t code);
+
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );
