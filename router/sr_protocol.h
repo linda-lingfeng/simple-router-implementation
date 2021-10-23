@@ -145,7 +145,9 @@ typedef struct sr_ethernet_hdr sr_ethernet_hdr_t;
 
 
 enum sr_ip_protocol {
-  ip_protocol_icmp = 0x0001,
+  ip_protocol_icmp = 0x01,
+  ip_protocol_tcp = 0x06,
+  ip_protocol_udp = 0x11;
 };
 
 enum sr_ethertype {

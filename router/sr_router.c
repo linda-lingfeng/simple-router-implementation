@@ -241,23 +241,84 @@ void sr_handle_ippacket(struct sr_instance* sr,
                         unsigned int len,
                         char* interface/* lent */)
 {
-  uint16_t sum;
+  sr_ip_hdr_t* ip_header = 0;
+  uint16_t packet_sum;
+  unsigned int header_len;
   uint32_t dest_ip;
   uint32_t source_ip;
 
-  /* Check length and perform checksum check*/
+  /* Check length of packet */
+  ip_header = (sr_ip_hdr_t*)packet;
   if (len > IP_MAXPACKET || len <= sizeof(sr_ip_hdr_t)){
     fprintf(stderr, "Invalid IP packet size");
     return;
   }
 
-
+  /* Perform checksum check*/
+  packet_sum = ntohs(ip_header->ip_sum);
+  header_len = (ip_header->ip_hl)*4;
+  ip_header->ip_sum = 0;
+  if (strncmp(cksum((packet, header_len /*check for precedence*/),
+          packet_sum, sizeof(uint16_t)) != 0) {
+    fprintf(stderr, "Checksum incorrect, header corrupt");
+    sr_send_icmp(sr, packet, len, interface, 12, 0);
+  }
 
   /*Decrement TTL, send type 11 ICMP if it is 0*/
+  (ip_header->ip_ttl)--;
+  if (ip_ttl == 0) {
+    fprintf(stderr, "Packet has expired, TTL=0");
+    sr_send_icmp(sr, packet, len interface, 11, 0);
+  }
 
   fprintf(stderr, "Confirmed integrity of following packet:");
   print_hdr_ip(packet);
 
+  /* Check the destination of the packet*/
+  uint8_t* load = packet + header_len
+  uint8_t protocol = ip_header->ip_p;
+  if (ntohl(ip_header->ip_dest) ==
+        (sr_get_interface(sr, interface)->ip) {
+    /* Packet is meant for me! */
+    if (protocol == ip_protocol_icmp) {
+      /* Handle icmp request*/
+      fprintf(stderr, "Received ICMP messge");
+      print_hdr_icmp(load);
+      sr_icmp_hdr_t* icmp_header = 0;
+      uint16_t icmp_sum;
+
+      /* Perform ICMP checksum*/
+      icmp_header = (sr_icmp_hdr_t*)load;
+      icmp_sum = ntohs(icmp_header->icmp_sum);
+      icmp_header->icmp_sum = 0;
+      
+      if (strncmp(cksum(load, len-header_len),
+              icmp_sum, sizeof(uint16_t)) != 0) {
+        fprintf(stderr, "ICMP checksum incorrect, data corrupt");
+        return;
+      }
+
+      /* Check if it is an echo request*/
+      if (icmp_header->icmp_type = 8) {
+        /* If it is an echo, reply*/
+        sr_send_icmp(sr, packet, len, interface, 0, 0);
+      } else {
+        /* Otherwise, we don't handle it*/
+        fprintf(stderr, "ICMP message type received, no action taken");
+        return;
+      }
+    } else if (protocol == ip_protocol_tcp || protocol == ip_protocol_udp) {
+      /* Send ICMP port unreacheable for traceroute
+       * in case of udp or tcp protocol*/
+      sr_send_icmp(sr, packet, len, interface, 3, 3);
+    } else {
+      /* Otherwise send ICMP protocol unrecognized*/
+      sr_send_icmp(sr, packet, len, interface, 3, 2);
+    }
+  } else {
+    /* Destined somewhere else so we forward packet!*/
+    sr_forward_ippacket(sr, packet, len, interface);
+  }
   return;
 };
 
