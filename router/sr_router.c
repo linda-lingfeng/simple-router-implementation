@@ -57,7 +57,6 @@ static void sr_forward_ippacket(struct sr_instance* sr,
                                 uint64_t* packet /* lent */,
                                 unsigned int len,
                                 char* interface/* lent */);
-char ether_broadcast_addr[ETHER_ADDR_LEN];
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -82,13 +81,10 @@ void sr_init(struct sr_instance* sr)
     pthread_t thread;
 
     pthread_create(&thread, &(sr->attr), sr_arpcache_timeout, sr);
-    
-    /* Add initialization code here! */
-    int i;
-    for (i = 0; i < 6; i++) {
-      ether_broadcast_addr[i] = 0xFF;
-    }
 
+    /* Initialize broadcast address external variables */
+    ether_broadcast_addr = {0xFF};
+    ip_broadcast_addr =  = 0xFFFFFFFF;
 
 } /* -- sr_init -- */
 
@@ -254,6 +250,8 @@ void sr_handle_ippacket(struct sr_instance* sr,
     fprintf(stderr, "Invalid IP packet size");
     return;
   }
+
+
 
   /*Decrement TTL, send type 11 ICMP if it is 0*/
 

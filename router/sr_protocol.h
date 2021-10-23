@@ -193,4 +193,7 @@ typedef struct sr_arp_packet sr_arp_packet_t;
 
 #define sr_IFACE_NAMELEN 32
 
+extern char ether_broadcast_addr[ETHER_ADDR_LEN]; 
+extern uint32_t ip_broadcast_addr;
+
 #endif /* -- SR_PROTOCOL_H -- */
