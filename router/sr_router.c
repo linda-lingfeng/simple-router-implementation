@@ -88,7 +88,7 @@ void sr_init(struct sr_instance* sr)
     /* Define broadcast address external variables */
     char temp[ETHER_ADDR_LEN] = {0xFF};
     strncpy(ether_broadcast_addr, temp, ETHER_ADDR_LEN);
-    uint32_t ip_broadcast_addr = 0xFFFFFFFF;
+    ip_broadcast_addr = 0xFFFFFFFF;
 
 } /* -- sr_init -- */
 
@@ -505,7 +505,7 @@ static uint8_t* sr_create_icmppacket(unsigned int* len,
     /* Copy in header of ip packet and 8 bytes of data into the
      * icmp_packet data field*/
     *len = sizeof(sr_icmp_packet_t);
-    icmp_packet = (sr_icmp_packet_t*)realloc(icmp_packet, *len);
+    icmp_packet = realloc(icmp_packet, *len);
     memcpy(((sr_icmp_packet_t*)icmp_packet)->data, data, ICMP_DATA_SIZE);
   } else {
     /* If it is an echo reply, only requires the header portion */
