@@ -138,7 +138,7 @@ void sr_handlepacket(struct sr_instance* sr,
 
   if (strncmp(dest_macaddr, ether_broadcast_addr, ETHER_ADDR_LEN != 0) &&
           strncmp(dest_macaddr, if_macaddr, ETHER_ADDR_LEN) != 0) {
-    fprintf(stderr, "Destination MAC address does not match interface");
+    fprintf(stderr, "Destination MAC address does not match interface \n");
     return;
   }
 
@@ -161,13 +161,13 @@ void sr_handlepacket(struct sr_instance* sr,
     } else if (arp_type == arp_op_reply) {
       sr_handle_arpreply(sr, load, load_len);
     } else {
-      fprintf(stderr, "Invalid ARP type");
+      fprintf(stderr, "Invalid ARP type \n");
       return;
     }
   } else if (ethertype == ethertype_ip) {
     sr_handle_ippacket(sr, load, load_len, interface);
   } else {
-    fprintf(stderr, "Unsupported Ethernet Type");
+    fprintf(stderr, "Unsupported Ethernet Type \n");
   }
 }/* end sr_handlepacket */
 
@@ -219,7 +219,7 @@ void sr_handle_arpreq(struct sr_instance* sr,
   /*Pass to sr_send_packet()*/
   if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len,
           interface) != 0) {
-    fprintf(stderr, "Packet could not be sent");
+    fprintf(stderr, "Packet could not be sent \n");
     free(arpreply);
     free(frame);
     return;
@@ -252,16 +252,18 @@ void sr_handle_ippacket(struct sr_instance* sr,
   /* Check length of packet */
   ip_header = (sr_ip_hdr_t*)packet;
   if (len > IP_MAXPACKET || len <= sizeof(sr_ip_hdr_t)){
-    fprintf(stderr, "Invalid IP packet size");
+    fprintf(stderr, "Invalid IP packet size \n");
     return;
   }
 
-  /* Perform checksum check*/
-  packet_sum = ntohs(ip_header->ip_sum);
+  /* Perform checksum check
+   * Note that cksum returns network byte
+   * order of the result*/
+  packet_sum = ip_header->ip_sum;
   header_len = (ip_header->ip_hl)*4;
   ip_header->ip_sum = 0;
   if (cksum(packet, header_len) != packet_sum) {
-    fprintf(stderr, "Checksum incorrect, header corrupt");
+    fprintf(stderr, "Checksum incorrect, header corrupt\n");
     sr_send_icmp(sr, packet, len, interface, 12, 0);
     return;
   }
@@ -269,35 +271,37 @@ void sr_handle_ippacket(struct sr_instance* sr,
   /*Decrement TTL, send type 11 ICMP if it is 0*/
   (ip_header->ip_ttl)--;
   if (ip_header->ip_ttl == 0) {
-    fprintf(stderr, "Packet has expired, TTL=0");
+    fprintf(stderr, "Packet has expired, TTL=0 \n");
     sr_send_icmp(sr, packet, len, interface, 11, 0);
     return;
   }
 
-  fprintf(stderr, "Confirmed integrity of following packet:");
+  fprintf(stderr, "Confirmed integrity of following packet:\n");
   print_hdr_ip(packet);
 
-  /* Check the destination of the packet*/
+  /* Check the destination of the packet
+   * Note that router interface ips are stored in
+   * network byte order. */
   uint8_t* load = packet + header_len;
   uint8_t protocol = ip_header->ip_p;
-  uint32_t dest_ip = ntohl(ip_header->ip_dst);
+  uint32_t dest_ip = ip_header->ip_dst;
   if (dest_ip == (sr_get_interface(sr, interface)->ip) ||
         dest_ip == ip_broadcast_addr) {
     /* Packet is meant for me! */
     if (protocol == ip_protocol_icmp) {
       /* Handle icmp request*/
-      fprintf(stderr, "Received ICMP messge");
+      fprintf(stderr, "Received ICMP messge \n");
       print_hdr_icmp(load);
       sr_icmp_hdr_t* icmp_header = 0;
       uint16_t icmp_sum;
 
       /* Perform ICMP checksum*/
       icmp_header = (sr_icmp_hdr_t*)load;
-      icmp_sum = ntohs(icmp_header->icmp_sum);
+      icmp_sum = icmp_header->icmp_sum;
       icmp_header->icmp_sum = 0;
       
       if (cksum(load, len-header_len) != icmp_sum) {
-        fprintf(stderr, "ICMP checksum incorrect, data corrupt");
+        fprintf(stderr, "ICMP checksum incorrect, data corrupt \n");
         return;
       }
 
@@ -307,7 +311,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
         sr_send_icmp(sr, packet, len, interface, 0, 0);
       } else {
         /* Otherwise, we don't handle it*/
-        fprintf(stderr, "ICMP message received, no action taken");
+        fprintf(stderr, "ICMP message received, no action taken \n");
         return;
       }
     } else if (protocol == ip_protocol_tcp || protocol == ip_protocol_udp) {
@@ -342,7 +346,7 @@ void sr_send_icmp(struct sr_instance* sr,
                   uint8_t type,
                   uint8_t code)
 {
-  fprintf(stderr, "Sending ICMP Type: %d , Code: %d", type, code);
+  fprintf(stderr, "Sending ICMP Type: %d , Code: %d \n", type, code);
   return;
 }
 
@@ -351,7 +355,7 @@ void sr_forward_ippacket(struct sr_instance* sr,
                          unsigned int len,
                          char* interface/* lent */)
 {
-  fprintf(stderr, "Forwarding packet ...");
+  fprintf(stderr, "Forwarding packet ... \n");
   return;
 };
 

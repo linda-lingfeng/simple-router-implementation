@@ -4,7 +4,7 @@
 #include "sr_protocol.h"
 #include "sr_utils.h"
 
-
+/* Returns the check some in network byte order */
 uint16_t cksum (const void *_data, int len) {
   const uint8_t *data = _data;
   uint32_t sum;
