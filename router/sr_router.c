@@ -24,6 +24,7 @@
 #include "sr_arpcache.h"
 #include "sr_utils.h"
 
+/* Helper function and global variable declarations*/
 static uint8_t* sr_create_etherframe(unsigned int load_len,
                                      uint8_t* load,
                                      char* dest_ether_addr,
@@ -57,7 +58,7 @@ static void sr_forward_ippacket(struct sr_instance* sr,
                                 char* interface/* lent */);
 
 char ether_broadcast_addr[ETHER_ADDR_LEN];
-uint32_t ip_broadcast_addr = 0xFFFFFFFF;
+uint32_t ip_broadcast_addr;
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -87,11 +88,15 @@ void sr_init(struct sr_instance* sr)
     /* Define broadcast address external variables */
     char temp[ETHER_ADDR_LEN] = {0xFF};
     strncpy(ether_broadcast_addr, temp, ETHER_ADDR_LEN);
+    uint32_t ip_broadcast_addr = 0xFFFFFFFF;
 
 } /* -- sr_init -- */
 
 /*---------------------------------------------------------------------
- * Method: sr_handlepacket(uint8_t* p,char* interface)
+ * Method: sr_handlepacket
+ * Input: struct sr_instance* sr, uint8_t* packet,unsigned int len,
+ * char* interface
+ * Output: void
  * Scope:  Global
  *
  * This method is called each time the router receives a packet on the
@@ -103,7 +108,6 @@ void sr_init(struct sr_instance* sr)
  * by sr_vns_comm.c that means do NOT delete either.  Make a copy of the
  * packet instead if you intend to keep it around beyond the scope of
  * the method call.
- *
  *---------------------------------------------------------------------*/
 
 void sr_handlepacket(struct sr_instance* sr,
@@ -171,12 +175,14 @@ void sr_handlepacket(struct sr_instance* sr,
 
 /*---------------------------------------------------------------------
  * Method: sr_handle_arpreq
+ * Input: struct sr_instance* sr, uint8_t* packet, unsigned int len,
+ * char* interface
  * Output: void
  * Scope:  Local
  *
  * This method handles extracting information from an arpreq and then
- * sending the appropriate reply given a pointer to the arpreq received
- * and the interface it came from.
+ * sending the appropriate reply given a pointer to the arpreq received,
+ * the length of the arpreq and the interface it came from.
  *---------------------------------------------------------------------*/
 void sr_handle_arpreq(struct sr_instance* sr,
                       uint8_t* packet /* lent */,
@@ -229,7 +235,7 @@ void sr_handle_arpreq(struct sr_instance* sr,
 
   /*TODO: Cache sender mapping in arp table*/
 
-};
+}; /* end sr_handle_arpreq */
 
 void sr_handle_arpreply(struct sr_instance* sr,
                         uint8_t* packet /* lent */,
@@ -238,6 +244,18 @@ void sr_handle_arpreply(struct sr_instance* sr,
   return;
 };
 
+/*---------------------------------------------------------------------
+ * Method: sr_handle_ippacket
+ * Input: struct sr_instance* sr,uint8_t* packet, unsigned int len,
+ * char* interface
+ * Output: uint8_t* (Pointer to allocated ip packet)
+ * Scope:  Local
+ *
+ * Given a pointer to an ippacket, length of the ip packet and the
+ * interface where it came from this method checks the integrity of
+ * the packet and decides whether to forward the packet, send an
+ * icmp response or do nothing.
+ *---------------------------------------------------------------------*/
 void sr_handle_ippacket(struct sr_instance* sr,
                         uint8_t* packet /* lent */,
                         unsigned int len,
@@ -327,7 +345,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
     sr_forward_ippacket(sr, packet, len, interface);
   }
   return;
-}
+} /* end sr_handle_ippacket */
 
 void sr_send_arp(struct sr_instance* sr,
                  unsigned int len,
@@ -361,14 +379,17 @@ void sr_forward_ippacket(struct sr_instance* sr,
 
 
 /*---------------------------------------------------------------------
- * Method: sr_create_etherframe (unsigned int load_len, uint8_t* load,
- * uint8_t* dest_ether_ddr, uint8_t* source_ether_addr, uint16_t ether_type)
+ * Method: sr_create_etherframe
+ * Input: unsigned int load_len, uint8_t* load,
+ * uint8_t* dest_ether_addr, uint8_t* source_ether_addr,
+ * uint16_t ether_type
  * Output: uint8_t* (pointer to allocated frame)
  * Scope:  Global
  *
- * This method allocates space for an ethernet frame given a particular
- * load, load_len, source and destination MAC addresses and ethernet type.
- * The frame is return as a pointer to the buffer in network byte order.
+ * This method allocates space for an ethernet frame given a pointer to
+ * the data and length of data, source and destination MAC addresses
+ * and ethernet type. The frame is return as a pointer to the buffer in
+ * network byte order.
  *---------------------------------------------------------------------*/
 
 uint8_t* sr_create_etherframe (unsigned int load_len,
@@ -393,10 +414,11 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
   memcpy((uint8_t*)frame + sizeof(sr_ethernet_hdr_t), load, load_len);
 
   return (uint8_t*) frame;
-}
+} /* end sr_create_etherframe */
 
 /*---------------------------------------------------------------------
- * Method: sr_arppacket (unsigned int* len, enum sr_arp_opcode arp_type,
+ * Method: sr_arppacket
+ * Input: unsigned int* len, enum sr_arp_opcode arp_type,
  * unsigned char* source_ether_addr, uint32_t source_protocol_addr,
  * unsigned char* dest_ether_addr, uint32_t dest_protocol_addr)
  * Output: sr_arp_packet_t* (Pointer to allocated arp packet)
@@ -404,9 +426,9 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
  *
  * This method allocates space for an arp packet given the arp type,
  * source hardware and protocol addresses and destination hardware and
- * protocol addresses. It returns a pointer to the packet with all fields
- * in network byte order and fills in the length of the packet in bytes
- * using "len".
+ * protocol addresses. It returns a pointer to the packet with all
+ * fields in network byte order and fills in the length of the packet
+ * in bytes (len).
  * 
  * Note: This function only creates arp packets where hardware type is 
  * ethernet and protocol type is ip.
@@ -454,8 +476,9 @@ uint8_t* sr_create_arppacket(unsigned int* len,
  * Scope:  Local
  *
  * This method allocates space for an icmp packet given a pointer to
- * the ip packet to be used as data (data), icmp type and icmp code.
- * The length attribute is used to return the total length of the
+ * the ip packet to be used as data (data), icmp type and icmp code
+ * returning a pointer to the allocated packet in network byte order.
+ * The len attribute is used to return the total length of the
  * packet for future processing.
  * 
  * Note: This function is meant for handling Type 0, Type 3, Type 11
@@ -492,5 +515,5 @@ static uint8_t* sr_create_icmppacket(unsigned int* len,
   /* Calculate checksum, note that sum is in network byte order */
   icmp_packet->icmp_sum = cksum(icmp_packet, *len);
   return (uint8_t*) icmp_packet;
-}  
+} /* end sr_create_icmppacket */
 
