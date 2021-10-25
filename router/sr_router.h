@@ -74,7 +74,7 @@ void sr_send_arp(struct sr_instance* sr,
                  char* dest_ether_addr,
                  uint32_t dest_ip_addr);
 void sr_send_icmp(struct sr_instance* sr,
-                  uint64_t* packet /* lent */,
+                  uint8_t* packet /* lent */,
                   unsigned int len,
                   char* interface/* lent */,
                   uint8_t type,
