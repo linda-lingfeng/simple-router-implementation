@@ -24,9 +24,6 @@
 #include "sr_arpcache.h"
 #include "sr_utils.h"
 
-static uint8_t* sr_create_icmppacket(unsigned int* len,
-                                     uint8_t icmp_type,
-                                     uint8_t icmp_code);
 static uint8_t* sr_create_etherframe(unsigned int load_len,
                                      uint8_t* load,
                                      char* dest_ether_addr,
@@ -38,7 +35,8 @@ static uint8_t* sr_create_arppacket(unsigned int* len,
                                     uint32_t source_ip_addr,
                                     char* dest_ether_addr,
                                     uint32_t dest_ip_addr);
-static uint8_t* sr_create_icmppacket(unsigned int* len,
+static uint8_t* sr_create_icmppacket(unsigned int *len,
+                                     uint8_t* data,
                                      uint8_t icmp_type,
                                      uint8_t icmp_code);
 
@@ -267,6 +265,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
     sr_send_icmp(sr, packet, len, interface, 12, 0);
     return;
   }
+  /* TODO: Reset header checksum to original*/
 
   /*Decrement TTL, send type 11 ICMP if it is 0*/
   (ip_header->ip_ttl)--;
@@ -304,6 +303,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
         fprintf(stderr, "ICMP checksum incorrect, data corrupt \n");
         return;
       }
+      /* TODO: Reset header checksum to original*/
 
       /* Check if it is an echo request*/
       if (icmp_header->icmp_type == 8) {
@@ -418,7 +418,7 @@ uint8_t* sr_create_arppacket(unsigned int* len,
                              char* dest_ether_addr,
                              uint32_t dest_ip_addr)
 {
-  fprintf(stderr, "Generating arp reply \n");
+  fprintf(stderr, "Generating arp packet \n");
   sr_arp_packet_t* arp_packet = 0;
   arp_packet = (sr_arp_packet_t*)malloc(sizeof(sr_arp_packet_t));
   
@@ -446,11 +446,51 @@ uint8_t* sr_create_arppacket(unsigned int* len,
   return (uint8_t*)arp_packet;
 }; /* end sr_create_arppacket */
 
+/*---------------------------------------------------------------------
+ * Method: sr_create_icmppacket
+ * Input: unsigned int* len, uint8_t* data, uint8_t icmp_type, uint8_t
+ * icmp_code
+ * Output: uint8_t* (Pointer to allocated icmp packet)
+ * Scope:  Local
+ *
+ * This method allocates space for an icmp packet given a pointer to
+ * the ip packet to be used as data (data), icmp type and icmp code.
+ * The length attribute is used to return the total length of the
+ * packet for future processing.
+ * 
+ * Note: This function is meant for handling Type 0, Type 3, Type 11
+ * and Type 12 ICMP packets only.
+ *---------------------------------------------------------------------*/
 static uint8_t* sr_create_icmppacket(unsigned int* len,
+                                     uint8_t* data,
                                      uint8_t icmp_type,
                                      uint8_t icmp_code)
 {
+  fprintf(stderr, "Generating ICMP message \n");
   sr_icmp_hdr_t* icmp_packet = 0;
+  icmp_packet = (sr_icmp_hdr_t*)malloc(sizeof(sr_icmp_hdr_t));
+
+  /* Fill in the type and code fields */
+  icmp_packet->icmp_code = icmp_code;
+  icmp_packet->icmp_type = icmp_type;
+
+  /* Allocate extra space based on type of icmp message */
+  if (icmp_type != icmp_type_echoreply) {
+    /* Requires */
+    assert(data);
+
+    /* Copy in header of ip packet and 8 bytes of data into the
+     * icmp_packet data field*/
+    *len = sizeof(sr_icmp_packet_t);
+    icmp_packet = (sr_icmp_packet_t*)realloc(icmp_packet, *len);
+    memcpy(((sr_icmp_packet_t*)icmp_packet)->data, data, ICMP_DATA_SIZE);
+  } else {
+    /* If it is an echo reply, only requires the header portion */
+    *len = sizeof(sr_icmp_hdr_t);
+  }
+
+  /* Calculate checksum, note that sum is in network byte order */
+  icmp_packet->icmp_sum = cksum(icmp_packet, *len);
   return (uint8_t*) icmp_packet;
 }  
 

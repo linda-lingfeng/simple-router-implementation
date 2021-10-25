@@ -74,8 +74,17 @@
   #define __BYTE_ORDER __BIG_ENDIAN
   #endif
 #endif
-#define ICMP_DATA_SIZE 28
 
+#ifndef ICMP_DATA_SIZE
+#define ICMP_DATA_SIZE 28
+#endif
+
+enum sr_icmp_type {
+  icmp_type_echoreply = 0x00,
+  icmp_type_dstunreachable = 0x03,
+  icmp_type_timeexceeded = 0x0B,
+  icmp_type_paramproblem = 0x0C,
+};
 
 /* Structure of a ICMP header
  */
