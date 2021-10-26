@@ -80,6 +80,7 @@ struct sr_packet {
     char *iface;                /* The outgoing interface */
     struct sr_packet *next;
 };
+typedef struct sr_packet sr_packet_t;
 
 struct sr_arpentry {
     unsigned char mac[6]; 
@@ -87,6 +88,7 @@ struct sr_arpentry {
     time_t added;         
     int valid;
 };
+typedef struct sr_arpentry sr_arpentry_t;
 
 struct sr_arpreq {
     uint32_t ip;
@@ -98,6 +100,7 @@ struct sr_arpreq {
     struct sr_packet *packets;  /* List of pkts waiting on this req to finish */
     struct sr_arpreq *next;
 };
+typedef struct sr_arpreq sr_arpreq_t;
 
 struct sr_arpcache {
     struct sr_arpentry entries[SR_ARPCACHE_SZ];
