@@ -194,6 +194,11 @@ void sr_handle_arpreq(struct sr_instance* sr,
                       unsigned int len,
                       char* interface/* lent */)
 {
+  /*Requires*/
+  assert(sr);
+  assert(packet);
+  assert(interface);
+
   /* Note assumes that ip address is destined for us*/
   /*TODO: Should add check to ensure hardware format is eth and protocol format is ip*/
   sr_arp_packet_t* arpreq = 0;
@@ -214,7 +219,6 @@ void sr_handle_arpreq(struct sr_instance* sr,
   char dest_ether_addr[ETHER_ADDR_LEN];
   memcpy(dest_ether_addr, sr_get_interface(sr, interface)->addr,
           ETHER_ADDR_LEN);
-  /*TODO: Error handling for case of malloc failure*/
   /* note dest and source reversed since we are replying to sender*/
   arpreply = sr_create_arppacket(&load_len, arp_op_reply, dest_ether_addr,
           dest_ip_addr, source_ether_addr, source_ip_addr);
@@ -247,6 +251,9 @@ void sr_handle_arpreply(struct sr_instance* sr,
                         uint8_t* packet /* lent */,
                         unsigned int len)
 {
+  /*Requires*/
+  assert(sr);
+  assert(packet);
   return;
 };
 
@@ -267,6 +274,11 @@ void sr_handle_ippacket(struct sr_instance* sr,
                         unsigned int len,
                         char* interface/* lent */)
 {
+  /*Requires*/
+  assert(sr);
+  assert(packet);
+  assert(interface);
+
   sr_ip_hdr_t* ip_header = 0;
   uint16_t packet_sum;
   unsigned int header_len;
@@ -382,6 +394,11 @@ void sr_send_icmp(struct sr_instance* sr,
                   uint8_t type,
                   uint8_t code)
 {
+  /*Requires*/
+  assert(sr);
+  assert(packet);
+  assert(interface);
+
   fprintf(stderr, "Sending ICMP Type: %d , Code: %d \n", type, code);
   uint8_t* icmp_packet = 0;
   uint8_t* ip_packet = 0;
@@ -447,7 +464,7 @@ void sr_forward_ippacket(struct sr_instance* sr,
  * This method allocates space for an ethernet frame given a pointer to
  * the data and length of data, source and destination MAC addresses
  * and ethernet type. The frame is return as a pointer to the buffer in
- * network byte order.
+ * network byte order or null if memory allocation was unsuccessful.
  *---------------------------------------------------------------------*/
 
 uint8_t* sr_create_etherframe (unsigned int load_len,
@@ -456,12 +473,18 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
                                char* source_ether_addr,
                                uint16_t ether_type)
 {
+  /*Requires*/
+  assert(load);
+  assert(dest_ether_addr);
+  assert(source_ether_addr);
+
   fprintf(stderr, "Wrapping in ethernet frame \n");
   sr_ethernet_hdr_t* frame = 0;
 
-  /*Allocate space for the ethernet frame*/
+  /*Allocate space for the ethernet frame, then checks it worked*/
   frame = (sr_ethernet_hdr_t*)malloc(sizeof(sr_ethernet_hdr_t) +
           load_len);
+  assert(frame);
 
   /* fill in the required fields*/
   memcpy(frame->ether_dhost, dest_ether_addr, ETHER_ADDR_LEN);
@@ -498,31 +521,36 @@ uint8_t* sr_create_arppacket(unsigned int* len,
                              char* dest_ether_addr,
                              uint32_t dest_ip_addr)
 {
+  /* Requires */
+  assert(len);
+  assert(source_ether_addr);
+  assert(dest_ether_addr);
+
+  /* Allocate space for packet and check it worked*/
   fprintf(stderr, "Generating arp packet \n");
   sr_arp_packet_t* arp_packet = 0;
   arp_packet = (sr_arp_packet_t*)malloc(sizeof(sr_arp_packet_t));
-  
-  if (arp_packet) {
-    /* Set hardware, protocol type and length */
-    arp_packet->ar_hrd = htons(arp_hrd_ethernet);
-    arp_packet->ar_pro = htons(arp_pro_ip);
-    arp_packet->ar_hln = ETHER_ADDR_LEN;
-    arp_packet->ar_pln = IP_ADDR_LEN;
+  assert(arp_packet);
 
-    /* Set ARP op code*/
-    arp_packet-> ar_op = htons(arp_type);
+  /* Set hardware, protocol type and length */
+  arp_packet->ar_hrd = htons(arp_hrd_ethernet);
+  arp_packet->ar_pro = htons(arp_pro_ip);
+  arp_packet->ar_hln = ETHER_ADDR_LEN;
+  arp_packet->ar_pln = IP_ADDR_LEN;
 
-    /*Set hardware, protocol source and destination data*/
-    memcpy(arp_packet->ar_sha, source_ether_addr, ETHER_ADDR_LEN);
-    arp_packet->ar_sip = source_ip_addr;
+  /* Set ARP op code*/
+  arp_packet-> ar_op = htons(arp_type);
 
-    memcpy(arp_packet->ar_tha, dest_ether_addr, ETHER_ADDR_LEN);
-    arp_packet->ar_tip = dest_ip_addr;
+  /*Set hardware, protocol source and destination data*/
+  memcpy(arp_packet->ar_sha, source_ether_addr, ETHER_ADDR_LEN);
+  arp_packet->ar_sip = source_ip_addr;
 
-    /* Set length of packet*/
-    *len=sizeof(sr_arp_packet_t);
-  }
-  
+  memcpy(arp_packet->ar_tha, dest_ether_addr, ETHER_ADDR_LEN);
+  arp_packet->ar_tip = dest_ip_addr;
+
+  /* Set length of packet*/
+  *len=sizeof(sr_arp_packet_t);
+
   return (uint8_t*)arp_packet;
 }; /* end sr_create_arppacket */
 
@@ -547,9 +575,13 @@ uint8_t* sr_create_ippacket (unsigned int load_len,
                              uint32_t source_ip,
                              uint32_t dest_ip)
 {
-  /* Declare variables and allocate space*/
+  /* Requires */
+  assert(load);
+
+  /* Declare variables and allocate space, then check for success*/
   sr_ip_hdr_t* packet = 0;
   packet = calloc(1, sizeof(sr_ip_hdr_t) + load_len);
+  assert(packet);
 
   /* Fill in required default fields*/
   packet->ip_hl = DEFAULT_HDRLEN;
@@ -589,13 +621,19 @@ uint8_t* sr_create_ippacket (unsigned int load_len,
  * and Type 12 ICMP packets only.
  *---------------------------------------------------------------------*/
 uint8_t* sr_create_icmppacket(unsigned int* len,
-                                     uint8_t* data,
-                                     uint8_t icmp_type,
-                                     uint8_t icmp_code)
+                              uint8_t* data,
+                              uint8_t icmp_type,
+                              uint8_t icmp_code)
 {
+  /* Requires */
+  assert(data);
+  assert(len);
+
+  /*Allocated space for packet then check if it worked*/
   fprintf(stderr, "Generating ICMP message \n");
   sr_icmp_hdr_t* icmp_packet = 0;
   icmp_packet = (sr_icmp_hdr_t*)malloc(sizeof(sr_icmp_hdr_t));
+  assert(icmp_packet);
 
   /* Fill in the type and code fields */
   icmp_packet->icmp_code = icmp_code;
