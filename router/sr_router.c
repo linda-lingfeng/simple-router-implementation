@@ -36,6 +36,11 @@ static uint8_t* sr_create_arppacket(unsigned int* len,
                                     uint32_t source_ip_addr,
                                     char* dest_ether_addr,
                                     uint32_t dest_ip_addr);
+static uint8_t* sr_create_ippacket (unsigned int load_len,
+                                    uint8_t* load,
+                                    uint8_t protocol,
+                                    uint32_t source_ip,
+                                    uint32_t dest_ip);
 static uint8_t* sr_create_icmppacket(unsigned int *len,
                                      uint8_t* data,
                                      uint8_t icmp_type,
@@ -365,6 +370,18 @@ void sr_send_icmp(struct sr_instance* sr,
                   uint8_t code)
 {
   fprintf(stderr, "Sending ICMP Type: %d , Code: %d \n", type, code);
+  uint8_t* icmp_packet = 0;
+  uint8_t* ether_frame = 0;
+  unsigned int load_len;
+
+  /* Construct the packet for sending out */
+  icmp_packet = sr_create_icmppacket(&load_len, packet, type, code);
+
+  /* Get destination ip from packet and attempt to do ARP lookup */
+
+  /* If ARP was found, wrap in ethernet frame */
+  /* Send packet out of given interface*/
+  /* Ensure memory is freed*/
   return;
 }
 
@@ -393,10 +410,10 @@ void sr_forward_ippacket(struct sr_instance* sr,
  *---------------------------------------------------------------------*/
 
 uint8_t* sr_create_etherframe (unsigned int load_len,
-                                uint8_t* load,
-                                char* dest_ether_addr,
-                                char* source_ether_addr,
-                                uint16_t ether_type)
+                               uint8_t* load,
+                               char* dest_ether_addr,
+                               char* source_ether_addr,
+                               uint16_t ether_type)
 {
   fprintf(stderr, "Wrapping in ethernet frame \n");
   sr_ethernet_hdr_t* frame = 0;
@@ -468,6 +485,16 @@ uint8_t* sr_create_arppacket(unsigned int* len,
   return (uint8_t*)arp_packet;
 }; /* end sr_create_arppacket */
 
+uint8_t* sr_create_ippacket (unsigned int load_len,
+                             uint8_t* load,
+                             uint8_t protocol,
+                             uint32_t source_ip,
+                             uint32_t dest_ip)
+{
+  sr_ip_hdr_t* packet = 0;
+  return (uint8_t*) packet;
+}
+
 /*---------------------------------------------------------------------
  * Method: sr_create_icmppacket
  * Input: unsigned int* len, uint8_t* data, uint8_t icmp_type, uint8_t
@@ -484,7 +511,7 @@ uint8_t* sr_create_arppacket(unsigned int* len,
  * Note: This function is meant for handling Type 0, Type 3, Type 11
  * and Type 12 ICMP packets only.
  *---------------------------------------------------------------------*/
-static uint8_t* sr_create_icmppacket(unsigned int* len,
+uint8_t* sr_create_icmppacket(unsigned int* len,
                                      uint8_t* data,
                                      uint8_t icmp_type,
                                      uint8_t icmp_code)
