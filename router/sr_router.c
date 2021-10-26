@@ -566,6 +566,9 @@ uint8_t* sr_create_ippacket (unsigned int load_len,
   /* Calculate checksum (returned in network order) and fill in*/
   packet->ip_sum = cksum(packet, sizeof(sr_ip_hdr_t));
 
+  /* Copy in the load*/
+  memcpy((uint8_t*)packet + sizeof(sr_ip_hdr_t), load, load_len);
+
   return (uint8_t*) packet;
 }
 
