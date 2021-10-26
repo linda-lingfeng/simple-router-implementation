@@ -233,10 +233,6 @@ void sr_handle_arpreq(struct sr_instance* sr,
   if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len,
           interface) != 0) {
     fprintf(stderr, "Packet could not be sent \n");
-
-    free(arpreply);
-    free(frame);
-    return;
   }
 
   /* Ensure memory is freed*/
@@ -412,6 +408,8 @@ void sr_send_icmp(struct sr_instance* sr,
 
   ip_packet = sr_create_ippacket(load_len, icmp_packet,
           ip_protocol_icmp, interface_info->ip, source_ip);
+  free(icmp_packet);
+
   /* Get destination ip from packet and attempt to do ARP lookup */
   sr_arpentry_t* arpentry = sr_arpcache_lookup(&sr->cache, source_ip);
   if (arpentry) {
@@ -422,22 +420,14 @@ void sr_send_icmp(struct sr_instance* sr,
     /* Send packet out of given interface*/
     if (sr_send_packet(sr, frame, sizeof(frame), interface) != 0) {
       fprintf(stderr, "Packet could not be sent \n");
-
-      free(icmp_packet);
-      free(ip_packet);
-      free(frame);
-      return;
     }
-    /* Ensure that memory is freed*/
-    free(arpentry);
-    free(icmp_packet);
+    /* Ensure that all memory is freed*/
     free(ip_packet);
     free(frame);
   } else {
     /* Otherwise, add to arp cache*/
-    free(sr_arpcache_queuereq(&sr->cache, source_ip, ip_packet,
-            sizeof(ip_packet), interface));
-    free(icmp_packet);
+    sr_arpcache_queuereq(&sr->cache, source_ip, ip_packet,
+            sizeof(ip_packet), interface);
   }
 
   return;
