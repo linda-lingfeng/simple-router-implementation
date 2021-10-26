@@ -148,8 +148,8 @@ typedef struct sr_arp_packet sr_arp_packet_t;
 #define DEFAULT_HDRLEN 5
 #endif
 
-#ifndef IP_VERSION
-#define IP_VERSION 4
+#ifndef IPV4_VERSION
+#define IPV4_VERSION 4
 #endif
 
 #ifndef DEFAULT_TTL

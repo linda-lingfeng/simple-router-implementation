@@ -201,11 +201,11 @@ void sr_handle_arpreq(struct sr_instance* sr,
   uint32_t source_ip_addr;
   uint32_t dest_ip_addr;
 
-  /*Extract data from arp packet*/
+  /*Extract data from arp packet, ip addresses kept in nbo*/
   arpreq = (sr_arp_packet_t*) packet;
   memcpy(source_ether_addr, arpreq->ar_sha, ETHER_ADDR_LEN);
-  source_ip_addr = ntohl(arpreq->ar_sip);
-  dest_ip_addr = ntohl(arpreq->ar_tip);
+  source_ip_addr = arpreq->ar_sip;
+  dest_ip_addr = arpreq->ar_tip;
 
   /*Create arp reply*/
   uint8_t* arpreply = 0;
@@ -229,6 +229,7 @@ void sr_handle_arpreq(struct sr_instance* sr,
   if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len,
           interface) != 0) {
     fprintf(stderr, "Packet could not be sent \n");
+
     free(arpreply);
     free(frame);
     return;
@@ -287,7 +288,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
     sr_send_icmp(sr, packet, len, interface, 12, 0);
     return;
   }
-  /* TODO: Reset header checksum to original*/
+  ip_header->ip_sum = packet_sum; /* Reset original checksum*/
 
   /*Decrement TTL, send type 11 ICMP if it is 0*/
   (ip_header->ip_ttl)--;
@@ -325,7 +326,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
         fprintf(stderr, "ICMP checksum incorrect, data corrupt \n");
         return;
       }
-      /* TODO: Reset header checksum to original*/
+      icmp_header->icmp_sum = icmp_sum; /* Reset original checksum*/
 
       /* Check if it is an echo request*/
       if (icmp_header->icmp_type == 8) {
@@ -373,13 +374,14 @@ void sr_send_icmp(struct sr_instance* sr,
   uint8_t* ether_frame = 0;
   unsigned int load_len;
 
-  /* Construct the packet for sending out */
+  /* Construct the ip packet for sending out */
   icmp_packet = sr_create_icmppacket(&load_len, packet, type, code);
 
   /* Get destination ip from packet and attempt to do ARP lookup */
   /* If ARP was found, wrap in ethernet frame */
   /* Send packet out of given interface*/
   /* Ensure memory is freed*/
+  /* Otherwise, add to arp cache*/
   return;
 }
 
@@ -440,10 +442,10 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
  * Scope:  Local
  *
  * This method allocates space for an arp packet given the arp type,
- * source hardware and protocol addresses and destination hardware and
- * protocol addresses. It returns a pointer to the packet with all
- * fields in network byte order and fills in the length of the packet
- * in bytes (len).
+ * source hardware and protocol addresses (in network byte order) and
+ * destination hardware and protocol addresses. It returns a pointer
+ * to the packet with all fields in network byte order and fills in
+ * the length of the packet in bytes (len).
  * 
  * Note: This function only creates arp packets where hardware type is 
  * ethernet and protocol type is ip.
@@ -471,10 +473,10 @@ uint8_t* sr_create_arppacket(unsigned int* len,
 
     /*Set hardware, protocol source and destination data*/
     memcpy(arp_packet->ar_sha, source_ether_addr, ETHER_ADDR_LEN);
-    arp_packet->ar_sip = htonl(source_ip_addr);
+    arp_packet->ar_sip = source_ip_addr;
 
     memcpy(arp_packet->ar_tha, dest_ether_addr, ETHER_ADDR_LEN);
-    arp_packet->ar_tip = htonl(dest_ip_addr);
+    arp_packet->ar_tip = dest_ip_addr;
 
     /* Set length of packet*/
     *len=sizeof(sr_arp_packet_t);
@@ -492,7 +494,8 @@ uint8_t* sr_create_arppacket(unsigned int* len,
  *
  * This method allocates space and attaches the header for an ip packet
  * naked of options when given a pointer to the data, load_len, protocol
- * type, source ip and destination ip.
+ * type, source ip and destination ip both in nbo.  It returns a pointer
+ * to the packet in nbo.
  * 
  * Note: Assigns default values for header length (5), version (ipv4)
  * and ttl (64).
@@ -516,8 +519,8 @@ uint8_t* sr_create_ippacket (unsigned int load_len,
   packet->ip_p = protocol;
 
   /* Set source and destination ip addresses*/
-  packet->ip_src = htonl(source_ip);
-  packet->ip_dst = htonl(dest_ip);
+  packet->ip_src = source_ip;
+  packet->ip_dst = dest_ip;
 
   /* Calculate checksum (returned in network order) and fill in*/
   packet->ip_sum = cksum(packet, sizeof(sr_ip_hdr_t));
