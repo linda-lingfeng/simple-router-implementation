@@ -68,14 +68,12 @@ int sr_read_from_server(struct sr_instance* );
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 void sr_send_arp(struct sr_instance* sr,
-                 unsigned int len,
                  char* interface/*lent*/,
                  unsigned short arp_type,
                  char* dest_ether_addr,
                  uint32_t dest_ip_addr);
 void sr_send_icmp(struct sr_instance* sr,
                   uint8_t* packet /* lent */,
-                  unsigned int len,
                   char* interface/* lent */,
                   uint8_t type,
                   uint8_t code);

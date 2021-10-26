@@ -46,13 +46,10 @@ static uint8_t* sr_create_icmppacket(unsigned int *len,
                                      uint8_t icmp_type,
                                      uint8_t icmp_code);
 
-static void sr_handle_arpreq(struct sr_instance* sr,
+static void sr_handle_arp(struct sr_instance* sr,
                              uint8_t* packet /* lent */,
                              unsigned int len,
                              char* interface/* lent */);
-static void sr_handle_arpreply(struct sr_instance* sr,
-                               uint8_t* packet /* lent */,
-                               unsigned int len);
 static void sr_handle_ippacket(struct sr_instance* sr,
                                uint8_t* packet /* lent */,
                                unsigned int len,
@@ -157,20 +154,9 @@ void sr_handlepacket(struct sr_instance* sr,
   fprintf(stderr, "Confirmed destination of following frame \n");
   print_hdr_eth(packet);
 
+  /* Pass off to appropriate helper function based on the ethertype*/
   if (ethertype == ethertype_arp) {
-    /* If it is ARP, check if it request or reply.  If it is request,
-     * send our reply. If it is a reply, process the associated ARP 
-     * req queue.*/
-    unsigned short arp_type;
-    arp_type = ntohs(((sr_arp_packet_t*)load)->ar_op);
-    if (arp_type == arp_op_request) {
-      sr_handle_arpreq(sr, load, load_len, interface);
-    } else if (arp_type == arp_op_reply) {
-      sr_handle_arpreply(sr, load, load_len);
-    } else {
-      fprintf(stderr, "Invalid ARP type \n");
-      return;
-    }
+    sr_handle_arp(sr, load, load_len, interface);
   } else if (ethertype == ethertype_ip) {
     sr_handle_ippacket(sr, load, load_len, interface);
   } else {
@@ -189,10 +175,10 @@ void sr_handlepacket(struct sr_instance* sr,
  * sending the appropriate reply given a pointer to the arpreq received,
  * the length of the arpreq and the interface it came from.
  *---------------------------------------------------------------------*/
-void sr_handle_arpreq(struct sr_instance* sr,
-                      uint8_t* packet /* lent */,
-                      unsigned int len,
-                      char* interface/* lent */)
+void sr_handle_arp(struct sr_instance* sr,
+                   uint8_t* packet /* lent */,
+                   unsigned int len,
+                   char* interface/* lent */)
 {
   /*Requires*/
   assert(sr);
@@ -200,58 +186,76 @@ void sr_handle_arpreq(struct sr_instance* sr,
   assert(interface);
 
   /* Note assumes that ip address is destined for us*/
-  /*TODO: Should add check to ensure hardware format is eth and protocol format is ip*/
-  sr_arp_packet_t* arpreq = 0;
+  sr_arp_packet_t* arp_packet = 0;
   char source_ether_addr[ETHER_ADDR_LEN];
   uint32_t source_ip_addr;
   uint32_t dest_ip_addr;
+  unsigned short arp_type;
 
-  /*Extract data from arp packet, ip addresses kept in nbo*/
-  arpreq = (sr_arp_packet_t*) packet;
-  memcpy(source_ether_addr, arpreq->ar_sha, ETHER_ADDR_LEN);
-  source_ip_addr = arpreq->ar_sip;
-  dest_ip_addr = arpreq->ar_tip;
+  /* Check that protocol is ethernet and ip*/
+  arp_packet = (sr_arp_packet_t*) packet;
+  fprintf(stderr, "Received the following ARP packet:");
+  print_hdr_arp(arp_packet); /*DEBUG*/
+  if(arp_packet->ar_hrd == arp_hrd_ethernet &&
+          arp_packet->ar_pro == arp_pro_ip) {
+    /*Extract data from arp packet, ip addresses kept in nbo*/
+    memcpy(source_ether_addr, arp_packet->ar_sha, ETHER_ADDR_LEN);
+    source_ip_addr = arp_packet->ar_sip;
+    dest_ip_addr = arp_packet->ar_tip;
+    arp_type = arp_packet->ar_op;
 
-  /*Create arp reply*/
-  uint8_t* arpreply = 0;
-  uint8_t* frame = 0;
-  unsigned int load_len;
-  char dest_ether_addr[ETHER_ADDR_LEN];
-  memcpy(dest_ether_addr, sr_get_interface(sr, interface)->addr,
-          ETHER_ADDR_LEN);
-  /* note dest and source reversed since we are replying to sender*/
-  arpreply = sr_create_arppacket(&load_len, arp_op_reply, dest_ether_addr,
-          dest_ip_addr, source_ether_addr, source_ip_addr);
-  print_hdr_arp(arpreply); /*DEBUG*/
-  
-  /*Create ethernet header*/
-  frame = sr_create_etherframe(load_len, arpreply, source_ether_addr,
-          dest_ether_addr, ethertype_arp);
-  print_hdr_eth(frame); /*DEBUG*/
-
-  /*Pass to sr_send_packet()*/
-  if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len,
-          interface) != 0) {
-    fprintf(stderr, "Packet could not be sent \n");
+    /* Check whether the arp packet is a request or a reply*/
+    if (arp_type == arp_op_request) {
+      /* If it is a request, cache arp information from sender */
+      sr_arpcache_insert(&sr->cache, source_ether_addr, source_ip_addr);
+      /* Send arp reply*/
+      sr_send_arp(sr, interface, arp_op_reply,
+              source_ether_addr,source_ip_addr);
+    } else if (arp_type == arp_op_reply) {
+      /* If it is a reply, send all associated packets based on reply*/
+      sr_arpreq_t* arp_req = 0;
+      /* Attempts to insert given arp information*/
+      arp_req = sr_arpcache_insert(&(sr->cache),
+              source_ether_addr, source_ip_addr);
+      if (arp_req) {
+        /* Since is exists, we can process all queued packets*/
+        sr_packet_t* curr = 0;
+        sr_packet_t* next = 0;
+        uint8_t* frame = 0;
+        sr_if_t* curr_iface = 0;
+        /* Send out each of the packets in the request queue*/
+        curr = arp_req->packets;
+        while(curr) {
+          next = curr->next;
+          /* Create ethernet frame and send out packet*/
+          curr_iface = sr_get_interface(sr, curr->iface);
+          frame = sr_create_etherframe(curr->len, curr->buf,
+                  source_ether_addr, curr_iface->addr, ethertype_ip);
+          if (sr_send_packet(sr, frame, sizeof(frame), interface) != 0) {
+            fprintf(stderr, "A packet could not be sent \n");
+          }
+          /* Free memory, reset the pointer and move to next packet*/
+          free(frame);
+          frame = 0;
+          curr = next;
+        }
+        /* Destroy the arp request */
+        sr_arpreq_destroy(&(sr->cache), arp_req);
+      } else {
+        fprintf(stderr, "ARP reply corresponds to non-existant req \n");
+        return;
+      };
+    } else {
+      fprintf(stderr, "Invalid ARP type \n");
+      return;
+    }
+  } else {
+    fprintf(stderr, "Invalid ARP hardware and protocol type \n");
+    return;
   }
 
-  /* Ensure memory is freed*/
-  free(arpreply);
-  free(frame);
-
-  /*TODO: Cache sender mapping in arp table*/
-
-}; /* end sr_handle_arpreq */
-
-void sr_handle_arpreply(struct sr_instance* sr,
-                        uint8_t* packet /* lent */,
-                        unsigned int len)
-{
-  /*Requires*/
-  assert(sr);
-  assert(packet);
   return;
-};
+}; /* end sr_handle_arpreq */
 
 /*---------------------------------------------------------------------
  * Method: sr_handle_ippacket
@@ -293,7 +297,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
   ip_header->ip_sum = 0;
   if (cksum(packet, header_len) != packet_sum) {
     fprintf(stderr, "Checksum incorrect, header corrupt\n");
-    sr_send_icmp(sr, packet, len, interface, 12, 0);
+    sr_send_icmp(sr, packet, interface, 12, 0);
     return;
   }
   ip_header->ip_sum = packet_sum; /* Reset original checksum*/
@@ -302,7 +306,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
   (ip_header->ip_ttl)--;
   if (ip_header->ip_ttl == 0) {
     fprintf(stderr, "Packet has expired, TTL=0 \n");
-    sr_send_icmp(sr, packet, len, interface, 11, 0);
+    sr_send_icmp(sr, packet, interface, 11, 0);
     return;
   }
 
@@ -320,7 +324,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
     /* Packet is meant for me! */
     if (protocol == ip_protocol_icmp) {
       /* Handle icmp request*/
-      fprintf(stderr, "Received ICMP messge \n");
+      fprintf(stderr, "Received ICMP message \n");
       print_hdr_icmp(load);
       sr_icmp_hdr_t* icmp_header = 0;
       uint16_t icmp_sum;
@@ -339,7 +343,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
       /* Check if it is an echo request*/
       if (icmp_header->icmp_type == 8) {
         /* If it is an echo, reply*/
-        sr_send_icmp(sr, packet, len, interface, 0, 0);
+        sr_send_icmp(sr, packet, interface, 0, 0);
       } else {
         /* Otherwise, we don't handle it*/
         fprintf(stderr, "ICMP message received, no action taken \n");
@@ -348,10 +352,10 @@ void sr_handle_ippacket(struct sr_instance* sr,
     } else if (protocol == ip_protocol_tcp || protocol == ip_protocol_udp) {
       /* Send ICMP port unreacheable for traceroute
        * in case of udp or tcp protocol*/
-      sr_send_icmp(sr, packet, len, interface, 3, 3);
+      sr_send_icmp(sr, packet, interface, 3, 3);
     } else {
       /* Otherwise send ICMP protocol unrecognized*/
-      sr_send_icmp(sr, packet, len, interface, 3, 2);
+      sr_send_icmp(sr, packet, interface, 3, 2);
     }
   } else {
     /* Destined somewhere else so we forward packet!*/
@@ -360,13 +364,61 @@ void sr_handle_ippacket(struct sr_instance* sr,
   return;
 } /* end sr_handle_ippacket */
 
+/*---------------------------------------------------------------------
+ * Method: sr_handle_ippacket
+ * Input: struct sr_instance* sr,uint8_t* packet, unsigned int len,
+ * char* interface
+ * Output: uint8_t* (Pointer to allocated ip packet)
+ * Scope:  Local
+ *
+ * Given a pointer to an ippacket, length of the ip packet and the
+ * interface where it came from this method checks the integrity of
+ * the packet and decides whether to forward the packet, send an
+ * icmp response or do nothing.
+ *---------------------------------------------------------------------*/
+
 void sr_send_arp(struct sr_instance* sr,
-                 unsigned int len,
                  char* interface/*lent*/,
                  unsigned short arp_type,
                  char* dest_ether_addr,
                  uint32_t dest_ip_addr)
 {
+  /*Requires*/
+  assert(sr);
+  assert(interface);
+  assert(dest_ether_addr);
+  
+  fprintf(stderr, "Sending an arp message:\n");
+  /*Declare variables*/
+  uint8_t* arp_packet = 0;
+  uint8_t* frame = 0;
+  unsigned int load_len;
+  sr_if_t* interface_info = 0;
+  char source_ether_addr[ETHER_ADDR_LEN];
+  char source_ip_addr;
+
+  /* Extract current interface ip and ethernet address*/
+  interface_info = sr_get_interface(sr, interface);
+  memcpy(source_ether_addr, interface_info->addr, ETHER_ADDR_LEN);
+  source_ip_addr = interface_info->ip;
+
+  /* Create arp packet*/
+  arp_packet = sr_create_arppacket(&load_len, arp_op_reply,
+          source_ether_addr, source_ip_addr,
+          dest_ether_addr, dest_ip_addr);
+  print_hdr_arp(arp_packet); /*DEBUG*/
+  
+  /*Create ethernet header*/
+  frame = sr_create_etherframe(load_len, arp_packet, source_ether_addr,
+          dest_ether_addr, ethertype_arp);
+  print_hdr_eth(frame); /*DEBUG*/
+
+  /*Pass to sr_send_packet()*/
+  if (sr_send_packet(sr, frame, sizeof(sr_ethernet_hdr_t) + load_len,
+          interface) != 0) {
+    fprintf(stderr, "Packet could not be sent \n");
+  }
+
   return;
 }
 
@@ -385,7 +437,6 @@ void sr_send_arp(struct sr_instance* sr,
 
 void sr_send_icmp(struct sr_instance* sr,
                   uint8_t* packet /* lent */,
-                  unsigned int len,
                   char* interface/* lent */,
                   uint8_t type,
                   uint8_t code)
