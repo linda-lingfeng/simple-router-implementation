@@ -278,8 +278,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
   }
 
   /* Perform checksum check
-   * Note that cksum returns network byte
-   * order of the result*/
+   * Note that cksum returns network byte order of the result*/
   packet_sum = ip_header->ip_sum;
   header_len = (ip_header->ip_hl)*4;
   ip_header->ip_sum = 0;
@@ -378,7 +377,6 @@ void sr_send_icmp(struct sr_instance* sr,
   icmp_packet = sr_create_icmppacket(&load_len, packet, type, code);
 
   /* Get destination ip from packet and attempt to do ARP lookup */
-
   /* If ARP was found, wrap in ethernet frame */
   /* Send packet out of given interface*/
   /* Ensure memory is freed*/
@@ -485,13 +483,45 @@ uint8_t* sr_create_arppacket(unsigned int* len,
   return (uint8_t*)arp_packet;
 }; /* end sr_create_arppacket */
 
+/*---------------------------------------------------------------------
+ * Method: sr_create_ippacket
+ * Input: unsigned int load_len, uint8_t* load, uint8_t protocol,
+ * uint32_t source_ip, uint32_t dest_ip
+ * Output: uint8_t* (Pointer to allocated ip packet)
+ * Scope:  Local
+ *
+ * This method allocates space and attaches the header for an ip packet
+ * naked of options when given a pointer to the data, load_len, protocol
+ * type, source ip and destination ip.
+ * 
+ * Note: Assigns default values for header length (5), version (ipv4)
+ * and ttl (64).
+ *---------------------------------------------------------------------*/
 uint8_t* sr_create_ippacket (unsigned int load_len,
                              uint8_t* load,
                              uint8_t protocol,
                              uint32_t source_ip,
                              uint32_t dest_ip)
 {
+  /* Declare variables and allocate space*/
   sr_ip_hdr_t* packet = 0;
+  packet = calloc(1, sizeof(sr_ip_hdr_t) + load_len);
+
+  /* Fill in required default fields*/
+  packet->ip_hl = DEFAULT_HDRLEN;
+  packet->ip_v = IPV4_VERSION;
+  packet->ip_ttl = DEFAULT_TTL;
+  /* Set packet length and protocol*/
+  packet->ip_len = htons(sizeof(sr_ip_hdr_t) + load_len);
+  packet->ip_p = protocol;
+
+  /* Set source and destination ip addresses*/
+  packet->ip_src = htonl(source_ip);
+  packet->ip_dst = htonl(dest_ip);
+
+  /* Calculate checksum (returned in network order) and fill in*/
+  packet->ip_sum = cksum(packet, sizeof(sr_ip_hdr_t));
+
   return (uint8_t*) packet;
 }
 
