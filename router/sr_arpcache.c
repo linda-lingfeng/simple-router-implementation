@@ -1,6 +1,7 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -11,17 +12,76 @@
 #include "sr_if.h"
 #include "sr_protocol.h"
 
-static void sr_handle_arpreq_queue(struct sr_arpreq* req);
+/* Local function declarations*/
+static void sr_handle_arpreq_queue(struct sr_instance *sr,
+                struct sr_arpreq* req);
+static void sr_arpcache_sweepreqs(struct sr_instance *sr);
 
-/* 
-  This function gets called every second. For each request sent out, we keep
-  checking whether we should resend an request or destroy the arp request.
-  See the comments in the header file for an idea of what it should look like.
-*/
-void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    /* Fill this in */
+/*---------------------------------------------------------------------
+ * Method: sr_arpcache_sweepreqs
+ * Input: struct sr_instance *sr
+ * Output: void
+ * Scope: Local
+ *
+ * This function gets called every second. For each request sent out,
+ * we keep checking whether we should resend an request or destroy the
+ * arp request.
+ *---------------------------------------------------------------------*/
+void sr_arpcache_sweepreqs(struct sr_instance *sr) {
+    /*Requires*/
+    assert(sr);
+
+    /* Loop through each request in the request queue*/
+    sr_arpreq_t* req = (sr->cache).requests;
+    while(req) {
+        sr_handle_arpreq_queue(sr, req);
+        req = req->next;
+    }
 }
 
+/*---------------------------------------------------------------------
+ * Method: sr_handle_arpreq_queue
+ * Input: struct sr_instance *sr, struct sr_arpreq* req
+ * Output: void
+ * Scope: Local
+ *
+ * This function gets called by sr)arpcache_sweepreqs for every request
+ * queue associated with the arp cache.  It checks entry to see if
+ * waiting time has been greater than a set time, if so it decides
+ * whether to destroy the request or send another arp packet based
+ * on the number of times an arpreq has been sent.
+ *---------------------------------------------------------------------*/
+void sr_handle_arpreq_queue(struct sr_instance *sr,
+                            struct sr_arpreq* req) {
+    /* Requires*/
+    assert(sr);
+    assert(req);
+
+    /* Only process requests that have been waiting for > 1 sec */
+    if(difftime(time(NULL), req->sent) > SR_ARPREQ_TO) {
+        /* Check if # of times sent is already 5*/
+        if (req->times_sent >= SR_ARPREQ_MAX) {
+            /* Send ICMP dest unreacheable for each packet*/
+            sr_packet_t* curr = 0;
+            while (curr) {
+                sr_send_icmp(sr, curr->buf, curr->iface,
+                                icmp_type_dstunreachable, 1);
+                curr = curr->next;
+            }
+            /* Destroy the req queue*/
+            sr_arpreq_destroy(&(sr->cache), req);
+        } else {
+            /* Send another arp request for this entry */
+            unsigned char dest_etheraddr[ETHER_ADDR_LEN] = {0};
+            char* interface = req->packets->iface;
+            sr_send_arp(sr, interface, arp_op_request,
+                            dest_etheraddr, req->ip);
+            /* Update last sent time and number of times sent*/
+            req->sent = time(NULL);
+            req->times_sent++;
+        }
+    }
+}
 /* You should not need to touch the rest of this code. */
 
 /* Checks if an IP->MAC mapping is in the cache. IP is in network byte order.

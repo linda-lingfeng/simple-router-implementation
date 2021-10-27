@@ -73,6 +73,9 @@
 
 #define SR_ARPCACHE_SZ    100  
 #define SR_ARPCACHE_TO    15.0
+#define SR_ARPREQ_TO      1.0
+#define SR_ARPREQ_MAX     5
+
 
 struct sr_packet {
     uint8_t *buf;               /* A raw ip packet */
