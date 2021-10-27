@@ -69,7 +69,7 @@
   #endif
 #endif
 
-#ifndef sr_IFACE_NAMELEN 32
+#ifndef sr_IFACE_NAMELEN
 #define sr_IFACE_NAMELEN 32
 #endif
 
@@ -231,7 +231,7 @@ typedef struct sr_icmp_packet sr_icmp_packet_t;
 /*-----------------------------------------------------------------------------
                               BROADCAST ADDRESSES
   ----------------------------------------------------------------------------*/
-extern char ether_broadcast_addr[ETHER_ADDR_LEN]; 
+extern unsigned char ether_broadcast_addr[ETHER_ADDR_LEN]; 
 extern uint32_t ip_broadcast_addr;
 
 #endif /* -- SR_PROTOCOL_H -- */

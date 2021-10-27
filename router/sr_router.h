@@ -70,7 +70,7 @@ void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 void sr_send_arp(struct sr_instance* sr,
                  char* interface/*lent*/,
                  unsigned short arp_type,
-                 char* dest_ether_addr,
+                 unsigned char* dest_ether_addr,
                  uint32_t dest_ip_addr);
 void sr_send_icmp(struct sr_instance* sr,
                   uint8_t* packet /* lent */,
