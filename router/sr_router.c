@@ -218,13 +218,11 @@ void sr_handle_arp(struct sr_instance* sr,
       if (arp_req) {
         /* Since is exists, we can process all queued packets*/
         sr_packet_t* curr = 0;
-        sr_packet_t* next = 0;
         uint8_t* frame = 0;
         sr_if_t* curr_iface = 0;
         /* Send out each of the packets in the request queue*/
         curr = arp_req->packets;
         while(curr) {
-          next = curr->next;
           /* Create ethernet frame and send out packet*/
           curr_iface = sr_get_interface(sr, curr->iface);
           frame = sr_create_etherframe(curr->len, curr->buf,
@@ -235,7 +233,7 @@ void sr_handle_arp(struct sr_instance* sr,
           /* Free memory, reset the pointer and move to next packet*/
           free(frame);
           frame = 0;
-          curr = next;
+          curr = curr->next;
         }
         /* Destroy the arp request */
         sr_arpreq_destroy(&(sr->cache), arp_req);
