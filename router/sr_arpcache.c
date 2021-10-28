@@ -11,6 +11,7 @@
 #include "sr_router.h"
 #include "sr_if.h"
 #include "sr_protocol.h"
+#include "sr_utils.h"
 
 /* Local function declarations*/
 static void sr_handle_arpreq_queue(struct sr_instance *sr,
@@ -72,10 +73,10 @@ void sr_handle_arpreq_queue(struct sr_instance *sr,
             sr_arpreq_destroy(&(sr->cache), req);
         } else {
             /* Send another arp request for this entry */
-            unsigned char dest_etheraddr[ETHER_ADDR_LEN] = {0};
             char* interface = req->packets->iface;
+            print_addr_eth(ether_broadcast_addr);
             sr_send_arp(sr, interface, arp_op_request,
-                            dest_etheraddr, req->ip);
+                            ether_broadcast_addr, req->ip);
             /* Update last sent time and number of times sent*/
             req->sent = time(NULL);
             req->times_sent++;
