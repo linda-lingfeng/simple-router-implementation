@@ -690,17 +690,25 @@ uint8_t* sr_create_icmppacket(unsigned int* len,
 
   /* Allocate extra space based on type of icmp message */
   if (icmp_type != icmp_type_echoreply) {
-    /* Requires */
-    assert(data);
-
     /* Copy in header of ip packet and 8 bytes of data into the
      * icmp_packet data field*/
     *len = sizeof(sr_icmp_packet_t);
     icmp_packet = realloc(icmp_packet, *len);
+    icmp_packet->variable_field = 0;
     memcpy(((sr_icmp_packet_t*)icmp_packet)->data, data, ICMP_DATA_SIZE);
   } else {
-    /* If it is an echo reply, only requires the header portion */
-    *len = sizeof(sr_icmp_hdr_t);
+    sr_icmp_hdr_t* echo_request = 0;
+    unsigned int data_len;
+    /* If it is an echo reply, obtain required info from echo request*/
+    data_len = ntohs((((sr_ip_hdr_t*)data)->ip_len)) - 
+            sizeof(sr_ip_hdr_t) - sizeof(sr_icmp_hdr_t);
+    echo_request = data + sizeof(sr_ip_hdr_t);
+    *len = sizeof(sr_icmp_hdr_t) + data_len;
+    /* Copy the data into an appropriately allocated icmp packet*/
+    icmp_packet = realloc(icmp_packet, len);
+    icmp_packet->variable_field = echo_request->variable_field;
+    memcpy((uint8_t*)icmp_packet + sizeof(sr_icmp_hdr_t),
+            (uint8_t*)echo_request + sizeof(sr_icmp_hdr_t), data_len);
   }
 
   /* Calculate checksum, note that sum is in network byte order */
