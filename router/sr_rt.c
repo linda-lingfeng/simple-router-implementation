@@ -131,6 +131,24 @@ struct in_addr gw, struct in_addr mask,char* if_name)
 
 } /* -- sr_add_entry -- */
 
+sr_rt_t* sr_rt_lookup(sr_rt_t* rt, uint32_t ip) {
+    /* Loop through the routing table */
+    sr_rt_t* lpm = NULL;
+    sr_rt_t* curr = rt;
+    uint32_t entry_prefix;
+    while (curr) {
+        /* Bitwise AND of ip and route subnet mask*/
+        entry_prefix = (curr->dest).s_addr & (curr-> mask).s_addr;
+        ip = (curr->mask).s_addr & ip;
+        /* If it matches, set lpm and return*/
+        if (ip == entry_prefix) {
+            lpm = curr;
+            return lpm;
+        }
+    }
+    return lpm;
+}
+
 /*---------------------------------------------------------------------
  * Method:
  *
