@@ -88,8 +88,7 @@ void sr_init(struct sr_instance* sr)
     pthread_create(&thread, &(sr->attr), sr_arpcache_timeout, sr);
 
     /* Define broadcast address external variables */
-    unsigned char temp[ETHER_ADDR_LEN] = {0xFF};
-    memcpy(ether_broadcast_addr, temp, ETHER_ADDR_LEN);
+    memset(ether_broadcast_addr, 0xFF, ETHER_ADDR_LEN);
     ip_broadcast_addr = 0xFFFFFFFF;
 
 } /* -- sr_init -- */
@@ -219,6 +218,7 @@ void sr_handle_arp(struct sr_instance* sr,
         /* Since is exists, we can process all queued packets*/
         sr_packet_t* curr = 0;
         uint8_t* frame = 0;
+        unsigned int frame_len;
         sr_if_t* curr_iface = 0;
         /* Send out each of the packets in the request queue*/
         curr = arp_req->packets;
@@ -229,7 +229,8 @@ void sr_handle_arp(struct sr_instance* sr,
           curr_iface = sr_get_interface(sr, curr->iface);
           frame = sr_create_etherframe(curr->len, curr->buf,
                   source_ether_addr, curr_iface->addr, ethertype_ip);
-          if (sr_send_packet(sr, frame, sizeof(frame), interface) != 0) {
+          frame_len = sizeof(sr_ethernet_hdr_t) + curr->len;
+          if (sr_send_packet(sr, frame, frame_len, interface) != 0) {
             fprintf(stderr, "A packet could not be sent \n");
           }
           /* Free memory, reset the pointer and move to next packet*/
@@ -401,7 +402,7 @@ void sr_send_arp(struct sr_instance* sr,
   source_ip_addr = interface_info->ip;
 
   /* Create arp packet*/
-  arp_packet = sr_create_arppacket(&load_len, arp_op_reply,
+  arp_packet = sr_create_arppacket(&load_len, arp_type,
           source_ether_addr, source_ip_addr,
           dest_ether_addr, dest_ip_addr);
   print_hdr_arp(arp_packet); /*DEBUG*/
@@ -452,6 +453,7 @@ void sr_send_icmp(struct sr_instance* sr,
   uint8_t* ip_packet = 0;
   uint32_t source_ip;
   unsigned int load_len;
+  unsigned int frame_len;
   sr_if_t* interface_info = sr_get_interface(sr, interface);
 
   /* Construct the ip packet for sending out */
@@ -461,7 +463,10 @@ void sr_send_icmp(struct sr_instance* sr,
 
   ip_packet = sr_create_ippacket(load_len, icmp_packet,
           ip_protocol_icmp, interface_info->ip, source_ip);
+
+  /* Clean up memory and updated load len*/
   free(icmp_packet);
+  load_len = load_len + sizeof(sr_ip_hdr_t);
   print_hdr_ip(ip_packet);
 
   /* Get destination ip from packet and attempt to do ARP lookup */
@@ -470,10 +475,11 @@ void sr_send_icmp(struct sr_instance* sr,
     fprintf(stderr, "Found in ARP cache, sending packet...\n");
     uint8_t* frame = 0;
     /* If ARP was found, wrap in ethernet frame */
-    frame = sr_create_etherframe(sizeof(ip_packet), ip_packet,
+    frame = sr_create_etherframe(load_len, ip_packet,
             arpentry->mac, interface_info->addr, ethertype_ip);
+    frame_len = sizeof(sr_ethernet_hdr_t) + load_len;
     /* Send packet out of given interface*/
-    if (sr_send_packet(sr, frame, sizeof(frame), interface) != 0) {
+    if (sr_send_packet(sr, frame, frame_len, interface) != 0) {
       fprintf(stderr, "Packet could not be sent \n");
     }
     /* Ensure that all memory is freed*/
@@ -483,7 +489,7 @@ void sr_send_icmp(struct sr_instance* sr,
     fprintf(stderr, "Not in ARP Cache, packet queued. \n");
     /* Otherwise, add to arp cache*/
     sr_arpcache_queuereq(&sr->cache, source_ip, ip_packet,
-            sizeof(ip_packet), interface);
+            load_len, interface);
   }
 
   return;
@@ -704,6 +710,7 @@ uint8_t* sr_create_icmppacket(unsigned int* len,
   }
 
   /* Calculate checksum, note that sum is in network byte order */
+  icmp_packet->icmp_sum = 0;
   icmp_packet->icmp_sum = cksum(icmp_packet, *len);
   return (uint8_t*) icmp_packet;
 } /* end sr_create_icmppacket */

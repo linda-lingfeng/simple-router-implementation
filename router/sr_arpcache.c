@@ -74,7 +74,6 @@ void sr_handle_arpreq_queue(struct sr_instance *sr,
         } else {
             /* Send another arp request for this entry */
             char* interface = req->packets->iface;
-            print_addr_eth(ether_broadcast_addr);
             sr_send_arp(sr, interface, arp_op_request,
                             ether_broadcast_addr, req->ip);
             /* Update last sent time and number of times sent*/
