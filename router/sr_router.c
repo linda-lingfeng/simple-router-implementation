@@ -135,7 +135,6 @@ void sr_handlepacket(struct sr_instance* sr,
   ether_hdr = (sr_ethernet_hdr_t*) packet;
 
   /* Ensure that ethernet destination address is correct */
-  /* TODO: Do a mininmum length check as well*/
   memcpy(dest_macaddr, ether_hdr->ether_dhost, ETHER_ADDR_LEN);
   memcpy(if_macaddr,
           sr_get_interface(sr, interface)->addr, ETHER_ADDR_LEN);
@@ -295,7 +294,6 @@ void sr_handle_ippacket(struct sr_instance* sr,
   ip_header->ip_sum = 0;
   if (cksum(packet, header_len) != packet_sum) {
     fprintf(stderr, "Checksum incorrect, header corrupt\n");
-    sr_send_icmp(sr, packet, interface, 12, 0);
     return;
   }
   ip_header->ip_sum = packet_sum; /* Reset original checksum*/
@@ -304,7 +302,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
   (ip_header->ip_ttl)--;
   if (ip_header->ip_ttl == 0) {
     fprintf(stderr, "Packet has expired, TTL=0 \n");
-    sr_send_icmp(sr, packet, interface, 11, 0);
+    sr_send_icmp(sr, packet, interface, icmp_type_timeexceeded, 0);
     return;
   }
 
@@ -341,7 +339,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
       /* Check if it is an echo request*/
       if (icmp_header->icmp_type == 8) {
         /* If it is an echo, reply*/
-        sr_send_icmp(sr, packet, interface, 0, 0);
+        sr_send_icmp(sr, packet, interface, icmp_type_echoreply, 0);
       } else {
         /* Otherwise, we don't handle it*/
         fprintf(stderr, "ICMP message received, no action taken \n");
@@ -350,10 +348,10 @@ void sr_handle_ippacket(struct sr_instance* sr,
     } else if (protocol == ip_protocol_tcp || protocol == ip_protocol_udp) {
       /* Send ICMP port unreacheable for traceroute
        * in case of udp or tcp protocol*/
-      sr_send_icmp(sr, packet, interface, 3, 3);
+      sr_send_icmp(sr, packet, interface, icmp_type_dstunreachable, 3);
     } else {
       /* Otherwise send ICMP protocol unrecognized*/
-      sr_send_icmp(sr, packet, interface, 3, 2);
+      sr_send_icmp(sr, packet, interface, icmp_type_dstunreachable, 2);
     }
   } else {
     /* Destined somewhere else so we forward packet!*/
