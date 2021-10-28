@@ -131,6 +131,16 @@ struct in_addr gw, struct in_addr mask,char* if_name)
 
 } /* -- sr_add_entry -- */
 
+/*---------------------------------------------------------------------
+ * Method: sr_rt_lookup
+ * Input: r_rt_t* rt, uint32_t ip
+ * Output: sr_rt_t*
+ * Scope:  Global
+ *
+ * Given a pointer for a routing table and an ip, this function returns
+ * a pointer to a route with an exact match for the network ID or NULL
+ * if a route is not found.
+ *---------------------------------------------------------------------*/
 sr_rt_t* sr_rt_lookup(sr_rt_t* rt, uint32_t ip) {
     /* Requires*/
     assert(rt);
