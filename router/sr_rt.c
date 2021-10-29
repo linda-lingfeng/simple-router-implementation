@@ -149,15 +149,17 @@ sr_rt_t* sr_rt_lookup(sr_rt_t* rt, uint32_t ip) {
     sr_rt_t* curr = rt;
     uint32_t rt_prefix;
     uint32_t ip_prefix;
+    unsigned long longest_mask = 0;
     /* Loop through the routing table */
     while (curr) {
         /* Bitwise AND of each ip and route subnet mask*/
         rt_prefix = (curr->dest).s_addr & (curr->mask).s_addr;
         ip_prefix = ip & (curr->mask).s_addr;
-        /* If it matches, set lpm and return*/
-        if (ip_prefix == rt_prefix) {
+        /* If it matches and has longer prefix, set lpm and return*/
+        if (ip_prefix == rt_prefix &&
+                        ntohl((curr->mask).s_addr) > longest_mask) {
             lpm = curr;
-            return lpm;
+            longest_mask = ntohl((curr->mask).s_addr);
         }
         /* Go to next entry */
         curr = curr->next;
