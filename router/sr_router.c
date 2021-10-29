@@ -299,9 +299,8 @@ void sr_handle_ippacket(struct sr_instance* sr,
   }
   ip_header->ip_sum = packet_sum; /* Reset original checksum*/
 
-  /*Decrement TTL, send type 11 ICMP if it is 0*/
-  (ip_header->ip_ttl)--;
-  if (ip_header->ip_ttl == 0) {
+  /*Checked decremented TTL, send type 11 ICMP if it is 0*/
+  if ((ip_header->ip_ttl)-1 == 0) {
     fprintf(stderr, "Packet has expired, TTL=0 \n");
     sr_send_icmp(sr, packet, interface, icmp_type_timeexceeded, 0);
     return;
@@ -316,8 +315,17 @@ void sr_handle_ippacket(struct sr_instance* sr,
   uint8_t* load = packet + header_len;
   uint8_t protocol = ip_header->ip_p;
   uint32_t dest_ip = ip_header->ip_dst;
-  if (dest_ip == (sr_get_interface(sr, interface)->ip) ||
-        dest_ip == ip_broadcast_addr) {
+  
+  /* Checks each of the routers interfaces to find match*/
+  sr_if_t* curr = sr->if_list;
+  int matches_router_if = 0;
+  while(!matches_router_if && curr) {
+    if (curr->ip == dest_ip) {
+      matches_router_if = 1;
+    }
+    curr = curr->next;
+  }
+  if (matches_router_if || dest_ip == ip_broadcast_addr) {
     /* Packet is meant for me! */
     if (protocol == ip_protocol_icmp) {
       /* Handle icmp request*/
@@ -450,6 +458,7 @@ void sr_send_icmp(struct sr_instance* sr,
   uint8_t* icmp_packet = 0;
   uint8_t* ip_packet = 0;
   uint32_t source_ip;
+  uint32_t dest_ip;
   unsigned int load_len;
   unsigned int frame_len;
   sr_if_t* interface_info = sr_get_interface(sr, interface);
@@ -457,10 +466,11 @@ void sr_send_icmp(struct sr_instance* sr,
   /* Construct the ip packet for sending out */
   icmp_packet = sr_create_icmppacket(&load_len, packet, type, code);
   source_ip = ((sr_ip_hdr_t*)packet)->ip_src;
+  dest_ip = ((sr_ip_hdr_t*)packet)->ip_dst;
   print_hdr_icmp(icmp_packet);
 
   ip_packet = sr_create_ippacket(load_len, icmp_packet,
-          ip_protocol_icmp, interface_info->ip, source_ip);
+          ip_protocol_icmp, dest_ip, source_ip);
 
   /* Clean up memory and updated load len*/
   free(icmp_packet);
@@ -526,8 +536,9 @@ void sr_forward_ippacket(struct sr_instance* sr,
   /* If route exists, forward packet */
   if (lpm) {
     sr_arpentry_t* arp_entry = 0;
-    /* Recalculate checksum*/
+    /* Recalculate checksum after ttl has been decremented*/
     packet->ip_sum = 0;
+    (packet->ip_ttl)--;
     packet->ip_sum = cksum(packet, (packet->ip_hl)*4);
 
     /* Do ip lookup in arp cache, if found forward*/
