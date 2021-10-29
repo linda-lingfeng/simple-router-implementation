@@ -469,8 +469,15 @@ void sr_send_icmp(struct sr_instance* sr,
   dest_ip = ((sr_ip_hdr_t*)packet)->ip_dst;
   print_hdr_icmp(icmp_packet);
 
-  ip_packet = sr_create_ippacket(load_len, icmp_packet,
-          ip_protocol_icmp, dest_ip, source_ip);
+  /* Source ip of packet is specific router interface dest for echo.
+   * Rest of ICMP messages have source ip of receiving interface*/
+  if (type == icmp_type_echoreply) {
+    ip_packet = sr_create_ippacket(load_len, icmp_packet,
+        ip_protocol_icmp, dest_ip, source_ip);
+  } else {
+    ip_packet = sr_create_ippacket(load_len, icmp_packet,
+        ip_protocol_icmp, interface_info->ip, source_ip);
+  }
 
   /* Clean up memory and updated load len*/
   free(icmp_packet);
