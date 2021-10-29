@@ -55,7 +55,7 @@ static void sr_handle_ippacket(struct sr_instance* sr,
                                unsigned int len,
                                char* interface/* lent */);
 static void sr_forward_ippacket(struct sr_instance* sr,
-                                uint8_t* packet /* lent */,
+                                sr_ip_hdr_t* packet /* lent */,
                                 unsigned int len,
                                 char* interface/* lent */);
 
@@ -134,7 +134,6 @@ void sr_handlepacket(struct sr_instance* sr,
   ether_hdr = (sr_ethernet_hdr_t*) packet;
 
   /* Ensure that ethernet destination address is correct */
-  /* TODO: Do a mininmum length check as well*/
   memcpy(dest_macaddr, ether_hdr->ether_dhost, ETHER_ADDR_LEN);
   memcpy(if_macaddr,
           sr_get_interface(sr, interface)->addr, ETHER_ADDR_LEN);
@@ -296,7 +295,6 @@ void sr_handle_ippacket(struct sr_instance* sr,
   ip_header->ip_sum = 0;
   if (cksum(packet, header_len) != packet_sum) {
     fprintf(stderr, "Checksum incorrect, header corrupt\n");
-    sr_send_icmp(sr, packet, interface, 12, 0);
     return;
   }
   ip_header->ip_sum = packet_sum; /* Reset original checksum*/
@@ -305,7 +303,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
   (ip_header->ip_ttl)--;
   if (ip_header->ip_ttl == 0) {
     fprintf(stderr, "Packet has expired, TTL=0 \n");
-    sr_send_icmp(sr, packet, interface, 11, 0);
+    sr_send_icmp(sr, packet, interface, icmp_type_timeexceeded, 0);
     return;
   }
 
@@ -342,7 +340,7 @@ void sr_handle_ippacket(struct sr_instance* sr,
       /* Check if it is an echo request*/
       if (icmp_header->icmp_type == 8) {
         /* If it is an echo, reply*/
-        sr_send_icmp(sr, packet, interface, 0, 0);
+        sr_send_icmp(sr, packet, interface, icmp_type_echoreply, 0);
       } else {
         /* Otherwise, we don't handle it*/
         fprintf(stderr, "ICMP message received, no action taken \n");
@@ -351,14 +349,14 @@ void sr_handle_ippacket(struct sr_instance* sr,
     } else if (protocol == ip_protocol_tcp || protocol == ip_protocol_udp) {
       /* Send ICMP port unreacheable for traceroute
        * in case of udp or tcp protocol*/
-      sr_send_icmp(sr, packet, interface, 3, 3);
+      sr_send_icmp(sr, packet, interface, icmp_type_dstunreachable, 3);
     } else {
       /* Otherwise send ICMP protocol unrecognized*/
-      sr_send_icmp(sr, packet, interface, 3, 2);
+      sr_send_icmp(sr, packet, interface, icmp_type_dstunreachable, 2);
     }
   } else {
     /* Destined somewhere else so we forward packet!*/
-    sr_forward_ippacket(sr, packet, len, interface);
+    sr_forward_ippacket(sr, (sr_ip_hdr_t*) packet, len, interface);
   }
   return;
 } /* end sr_handle_ippacket */
@@ -495,12 +493,67 @@ void sr_send_icmp(struct sr_instance* sr,
   return;
 }
 
+/*---------------------------------------------------------------------
+ * Method: sr_forward_ippacket
+ * Input: struct sr_instance* sr, sr_ip_hdr_t* packet, unsigned int len,
+ * char* interface
+ * Output: void
+ * Scope:  Local
+ *
+ * Given a pointer to a specified ip packet and it's length this
+ * function looks for the destination ip in the routing table and
+ * forwards the packet via the interface found after recalculating
+ * the checksum.  If a route is not found, it will send an ICMP type 3
+ * message back using the interface passed in.
+ *---------------------------------------------------------------------*/
+
 void sr_forward_ippacket(struct sr_instance* sr,
-                         uint8_t* packet /* lent */,
+                         sr_ip_hdr_t* packet /* lent */,
                          unsigned int len,
                          char* interface/* lent */)
 {
+  /* Requires*/
+  assert(sr);
+  assert(packet);
+
   fprintf(stderr, "Forwarding packet ... \n");
+  uint32_t dest_ip;
+  sr_rt_t* lpm = 0;
+
+  /* Look for route in routing table*/
+  dest_ip = packet->ip_dst;
+  lpm = sr_rt_lookup(sr->routing_table, dest_ip);
+  /* If route exists, forward packet */
+  if (lpm) {
+    sr_arpentry_t* arp_entry = 0;
+    /* Recalculate checksum*/
+    packet->ip_sum = 0;
+    packet->ip_sum = cksum(packet, (packet->ip_hl)*4);
+
+    /* Do ip lookup in arp cache, if found forward*/
+    arp_entry = sr_arpcache_lookup(&(sr->cache), (lpm->gw).s_addr);
+    if (arp_entry) {
+      uint8_t* frame = 0;
+      /* Retrieve required information and wrap in ethernet frame */
+      sr_if_t* interface_info = sr_get_interface(sr, lpm->interface);
+      frame = sr_create_etherframe(len, (uint8_t*)packet, arp_entry->mac,
+              interface_info->addr, ethertype_ip);
+      /* Send packet out of the route*/
+      if (sr_send_packet(sr, frame, len + sizeof(sr_ethernet_hdr_t),
+              lpm->interface) != 0) {
+        fprintf(stderr, "Packet could not be sent \n");
+      }
+    } else {
+      /* If not found, queue packet*/
+      sr_arpcache_queuereq(&(sr->cache), (lpm->gw).s_addr,
+              (uint8_t*) packet, len, lpm->interface);
+    }
+  } else {
+    /* Send out ICMP dest unreacheable*/
+    sr_send_icmp(sr, (uint8_t*)packet, interface,
+            icmp_type_dstunreachable, 0);
+  }
+
   return;
 };
 
@@ -696,17 +749,25 @@ uint8_t* sr_create_icmppacket(unsigned int* len,
 
   /* Allocate extra space based on type of icmp message */
   if (icmp_type != icmp_type_echoreply) {
-    /* Requires */
-    assert(data);
-
     /* Copy in header of ip packet and 8 bytes of data into the
      * icmp_packet data field*/
     *len = sizeof(sr_icmp_packet_t);
     icmp_packet = realloc(icmp_packet, *len);
+    icmp_packet->variable_field = 0;
     memcpy(((sr_icmp_packet_t*)icmp_packet)->data, data, ICMP_DATA_SIZE);
   } else {
-    /* If it is an echo reply, only requires the header portion */
-    *len = sizeof(sr_icmp_hdr_t);
+    sr_icmp_hdr_t* echo_request = 0;
+    unsigned int data_len;
+    /* If it is an echo reply, obtain required info from echo request*/
+    data_len = ntohs((((sr_ip_hdr_t*)data)->ip_len)) - 
+            sizeof(sr_ip_hdr_t) - sizeof(sr_icmp_hdr_t);
+    echo_request = (sr_icmp_hdr_t*)(data + sizeof(sr_ip_hdr_t));
+    *len = sizeof(sr_icmp_hdr_t) + data_len;
+    /* Copy the data into an appropriately allocated icmp packet*/
+    icmp_packet = realloc(icmp_packet, *len);
+    icmp_packet->variable_field = echo_request->variable_field;
+    memcpy((uint8_t*)icmp_packet + sizeof(sr_icmp_hdr_t),
+            (uint8_t*)echo_request + sizeof(sr_icmp_hdr_t), data_len);
   }
 
   /* Calculate checksum, note that sum is in network byte order */

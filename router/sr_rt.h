@@ -35,12 +35,12 @@ struct sr_rt
     char   interface[sr_IFACE_NAMELEN];
     struct sr_rt* next;
 };
-
+typedef struct sr_rt sr_rt_t;
 
 int sr_load_rt(struct sr_instance*,const char*);
 void sr_add_rt_entry(struct sr_instance*, struct in_addr,struct in_addr,
                   struct in_addr, char*);
-struct sr_rt* sr_rt_lookup(struct sr_rt, uint32_t ip);
+sr_rt_t* sr_rt_lookup(sr_rt_t* rt, uint32_t ip);
 void sr_print_routing_table(struct sr_instance* sr);
 void sr_print_routing_entry(struct sr_rt* entry);
 

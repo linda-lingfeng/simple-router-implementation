@@ -207,7 +207,8 @@ enum sr_icmp_type {
   icmp_type_paramproblem = 0x0C,
 };
 
-/* Structure of a ICMP header
+/* 
+ * Structure of a ICMP header
  */
 struct sr_icmp_hdr {
   uint8_t icmp_type;
