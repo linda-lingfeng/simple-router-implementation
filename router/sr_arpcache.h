@@ -81,6 +81,7 @@ struct sr_packet {
     uint8_t *buf;               /* A raw ip packet */
     unsigned int len;           /* Length of ip packet*/
     char *iface;                /* The outgoing interface */
+    char *sender;               /* The incoming interface */
     struct sr_packet *next;
 };
 typedef struct sr_packet sr_packet_t;
@@ -127,7 +128,8 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                          uint32_t ip,
                          uint8_t *packet,               /* borrowed */
                          unsigned int packet_len,
-                         char *iface);
+                         char *iface,
+                         char *sender);
 
 /* This method performs two functions:
    1) Looks up this IP in the request queue. If it is found, returns a pointer

@@ -64,8 +64,9 @@ void sr_handle_arpreq_queue(struct sr_instance *sr,
         if (req->times_sent >= SR_ARPREQ_MAX) {
             /* Send ICMP dest unreacheable for each packet*/
             sr_packet_t* curr = 0;
+            curr = req->packets;
             while (curr) {
-                sr_send_icmp(sr, curr->buf, curr->iface,
+                sr_send_icmp(sr, curr->buf, curr->sender,
                                 icmp_type_dstunreachable, 1);
                 curr = curr->next;
             }
@@ -120,7 +121,8 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                                        uint32_t ip,
                                        uint8_t *packet,           /* borrowed */
                                        unsigned int packet_len,
-                                       char *iface)
+                                       char *iface,
+                                       char *sender)
 {
     pthread_mutex_lock(&(cache->lock));
     
@@ -147,7 +149,9 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
         memcpy(new_pkt->buf, packet, packet_len);
         new_pkt->len = packet_len;
 		new_pkt->iface = (char *)malloc(sr_IFACE_NAMELEN);
+        new_pkt->sender = (char *)malloc(sr_IFACE_NAMELEN);
         strncpy(new_pkt->iface, iface, sr_IFACE_NAMELEN);
+        strncpy(new_pkt->sender, sender, sr_IFACE_NAMELEN);
         new_pkt->next = req->packets;
         req->packets = new_pkt;
     }

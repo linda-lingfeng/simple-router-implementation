@@ -504,7 +504,7 @@ void sr_send_icmp(struct sr_instance* sr,
     fprintf(stderr, "Not in ARP Cache, packet queued. \n");
     /* Otherwise, add to arp cache*/
     sr_arpcache_queuereq(&sr->cache, source_ip, ip_packet,
-            load_len, interface);
+            load_len, interface, interface);
   }
 
   return;
@@ -564,7 +564,7 @@ void sr_forward_ippacket(struct sr_instance* sr,
     } else {
       /* If not found, queue packet*/
       sr_arpcache_queuereq(&(sr->cache), (lpm->gw).s_addr,
-              (uint8_t*) packet, len, lpm->interface);
+              (uint8_t*) packet, len, lpm->interface, interface);
     }
   } else {
     /* Send out ICMP dest unreacheable*/
