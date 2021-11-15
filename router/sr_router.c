@@ -299,13 +299,6 @@ void sr_handle_ippacket(struct sr_instance* sr,
   }
   ip_header->ip_sum = packet_sum; /* Reset original checksum*/
 
-  /*Checked decremented TTL, send type 11 ICMP if it is 0*/
-  if ((ip_header->ip_ttl)-1 == 0) {
-    fprintf(stderr, "Packet has expired, TTL=0 \n");
-    sr_send_icmp(sr, packet, interface, icmp_type_timeexceeded, 0);
-    return;
-  }
-
   fprintf(stderr, "Confirmed integrity of following packet:\n");
   print_hdr_ip(packet);
 
@@ -363,6 +356,12 @@ void sr_handle_ippacket(struct sr_instance* sr,
       sr_send_icmp(sr, packet, interface, icmp_type_dstunreachable, 2);
     }
   } else {
+    /*Checked decremented TTL, send type 11 ICMP if it is 0*/
+    if ((ip_header->ip_ttl)-1 == 0) {
+      fprintf(stderr, "Packet has expired, TTL=0 \n");
+      sr_send_icmp(sr, packet, interface, icmp_type_timeexceeded, 0);
+      return;
+    }
     /* Destined somewhere else so we forward packet!*/
     sr_forward_ippacket(sr, (sr_ip_hdr_t*) packet, len, interface);
   }
