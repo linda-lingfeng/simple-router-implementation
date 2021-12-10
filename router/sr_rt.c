@@ -138,7 +138,7 @@ struct in_addr gw, struct in_addr mask,char* if_name)
  * Scope:  Global
  *
  * Given a pointer for a routing table and an ip, this function returns
- * a pointer to a route with an exact match for the network ID or NULL
+ * a pointer to a route with the lpm for the network ID or NULL
  * if a route is not found.
  *---------------------------------------------------------------------*/
 sr_rt_t* sr_rt_lookup(sr_rt_t* rt, uint32_t ip) {
@@ -165,7 +165,7 @@ sr_rt_t* sr_rt_lookup(sr_rt_t* rt, uint32_t ip) {
         curr = curr->next;
     }
     return lpm;
-}
+} /* -- sr_rt_lookup -- */
 
 /*---------------------------------------------------------------------
  * Method:

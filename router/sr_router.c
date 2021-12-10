@@ -253,7 +253,7 @@ void sr_handle_arp(struct sr_instance* sr,
   }
 
   return;
-}; /* end sr_handle_arpreq */
+}; /* end sr_handle_arp */
 
 /*---------------------------------------------------------------------
  * Method: sr_handle_ippacket
@@ -620,7 +620,7 @@ uint8_t* sr_create_etherframe (unsigned int load_len,
 } /* end sr_create_etherframe */
 
 /*---------------------------------------------------------------------
- * Method: sr_arppacket
+ * Method: sr_create_arppacket
  * Input: unsigned int* len, enum sr_arp_opcode arp_type,
  * unsigned char* source_ether_addr, uint32_t source_protocol_addr,
  * unsigned char* dest_ether_addr, uint32_t dest_protocol_addr)
