@@ -219,8 +219,7 @@ struct sr_icmp_hdr {
 typedef struct sr_icmp_hdr sr_icmp_hdr_t;
 
 /*
- * Structure of ICMP packet, applies to most types
- * except Type 0 echo reply.
+ * Structure of ICMP packet
  */
  
 struct sr_icmp_packet {
